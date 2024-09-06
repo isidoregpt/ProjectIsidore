@@ -1,4 +1,4 @@
-# ProjectIsidore
+# Project Isidore
 Project Isidore GPT-4 Grader
 Automated Essay Grader Using GPT-4 and Custom Rubrics
 Project Isidore GPT-4 Grader is an easy-to-use Python application that leverages OpenAI's GPT-4 to automatically grade student essays based on a customizable grading rubric. Designed to streamline grading for educators, the application identifies grammatical errors, improper word usage, and other common writing issues, while offering constructive corrections. The system allows users to load their own grading rubric and student essays, providing detailed corrections with point deductions.
