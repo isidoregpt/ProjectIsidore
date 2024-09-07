@@ -1,0 +1,197 @@
+# This work is licensed under the Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0) license.
+# For more information, visit https://creativecommons.org/licenses/by-sa/4.0/legalcode.
+#
+# Author: Jonathan Graziola (isidore.gpt@gmail.com)
+#
+# You are free to share and adapt the material as long as you give appropriate credit and distribute your contributions under the same license.
+
+import tkinter as tk
+from tkinter import filedialog, messagebox, Entry, ttk
+import os
+import openai
+import datetime
+
+class Grader:
+    def __init__(self):
+        self.api_key = None
+        self.prompt_path = None
+        self.rubric_path = None
+        self.session = None
+        self.folder_path = None
+        self.temperature = 1.0  # Default value for temperature
+        self.top_p = 0.5  # Default value for nucleus sampling
+        self.rubric_content = None
+
+    def set_api_key(self, api_key_path):
+        with open(api_key_path, 'r') as file:
+            self.api_key = file.read().strip()
+        openai.api_key = self.api_key
+
+    def select_prompt(self, prompt_path):
+        self.prompt_path = prompt_path
+
+    def select_rubric(self, rubric_path):
+        self.rubric_path = rubric_path
+        self.rubric_content = self._read_content_from_file(rubric_path)
+
+    def initialize_session(self, reference_material_path):
+        self.session = "Initialized with reference material"
+
+    def select_folder(self, folder_path):
+        self.folder_path = folder_path
+
+    def grade(self, iterations=2, temperature=1.0, top_p=0.5):
+        self.temperature = temperature
+        self.top_p = top_p
+        if not all([self.api_key, self.prompt_path, self.rubric_path, self.session, self.folder_path]):
+            raise Exception("Ensure all data has been loaded before grading.")
+        
+        rubric = self.rubric_content
+        prompt = self._read_content_from_file(self.prompt_path)
+        file_list = os.listdir(self.folder_path)
+
+        for idx, filename in enumerate(file_list):
+            essay_path = os.path.join(self.folder_path, filename)
+            original_essay_content = self._read_content_from_file(essay_path)
+            essay_content = original_essay_content
+
+            for _ in range(iterations):
+                grading_request = (
+                    "The following is an uncorrected student essay that contains grammatical and spelling mistakes. "
+                    "Please correct the essay based on the provided rubric. For each correction, place the corrected text in the "
+                    "'Corrected Essay' section and indicate the mistakes with point deductions in parentheses next to the mistake. "
+                    "Do not repeat or omit any part of the original essay. Summarize the total points deducted at the end. "
+                    "\n\nPrompt:\n{prompt}\n\nStudent Essay (contains errors):\n{essay_content}\n\nRubric:\n{rubric}"
+                ).format(prompt=prompt, essay_content=essay_content, rubric=rubric)
+                
+                response = openai.ChatCompletion.create(
+                    model="gpt-4",
+                    messages=[
+                        {"role": "system", "content": f"You are a helpful assistant that grades and corrects essays."},
+                        {"role": "user", "content": grading_request}
+                    ],
+                    temperature=self.temperature,
+                    top_p=self.top_p
+                )
+                essay_content = response['choices'][0]['message']['content']
+
+            graded_file_path = os.path.join(self.folder_path, f"T_{self.temperature}_top_p_{self.top_p}_graded_{filename}")
+            with open(graded_file_path, 'w', encoding='utf-8') as file:
+                # Output format with "Student Essay" and cleaned "Corrected Essay"
+                file.write(f"Student Essay:\n\n{original_essay_content}\n\n{essay_content}")
+
+        return "Grading completed!"
+
+    def _read_content_from_file(self, file_path):
+        with open(file_path, 'r', encoding='utf-8') as file:
+            return file.read()
+
+class GraderApp:
+    def __init__(self, root, grader):
+        self.root = root
+        self.grader = grader
+        self.log_file_path = os.path.join(os.getcwd(), f"log_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+        self.setup_ui()
+
+    def log(self, message):
+        with open(self.log_file_path, 'a') as f:
+            f.write(message + "\n")
+
+    def setup_ui(self):
+        self.root.title("Project Isidore GPT-4")
+        self.root.geometry('1200x900')
+
+        # Title
+        title_label = tk.Label(self.root, text="Project Isidore GPT-4", font=("Helvetica", 48))
+        title_label.pack(pady=30)
+
+        # API Key Selection
+        tk.Button(self.root, text="API Key", command=self.set_api_key, font=("Arial", 14)).pack(pady=5)
+        self.api_key_filename_var = tk.StringVar(value="No file selected")
+        tk.Label(self.root, textvariable=self.api_key_filename_var, font=("Arial", 12)).pack(pady=5)
+
+        # Student Essays (Folder Selection)
+        tk.Button(self.root, text="Student Essays", command=self.select_folder, font=("Arial", 14)).pack(pady=5)
+        self.folder_name_var = tk.StringVar(value="No folder selected")
+        tk.Label(self.root, textvariable=self.folder_name_var, font=("Arial", 12)).pack(pady=5)
+
+        # Rubric Selection
+        tk.Button(self.root, text="Rubric", command=self.select_rubric, font=("Arial", 14)).pack(pady=5)
+        self.rubric_filename_var = tk.StringVar(value="No file selected")
+        tk.Label(self.root, textvariable=self.rubric_filename_var, font=("Arial", 12)).pack(pady=5)
+
+        # Student Prompt Selection
+        tk.Button(self.root, text="Student Prompt", command=self.select_prompt, font=("Arial", 14)).pack(pady=5)
+        self.prompt_filename_var = tk.StringVar(value="No file selected")
+        tk.Label(self.root, textvariable=self.prompt_filename_var, font=("Arial", 12)).pack(pady=5)
+
+        # Reference Material Selection
+        tk.Button(self.root, text="Reference Material", command=self.initialize_session, font=("Arial", 14)).pack(pady=5)
+        self.reference_material_filename_var = tk.StringVar(value="No file selected")
+        tk.Label(self.root, textvariable=self.reference_material_filename_var, font=("Arial", 12)).pack(pady=5)
+
+        # Model Settings
+        tk.Label(self.root, text="Model Settings:", font=("Arial", 14)).pack(pady=20)
+        self.temp_scale = tk.Scale(self.root, from_=0, to=1, resolution=0.1, orient=tk.HORIZONTAL, label="Temperature", font=("Arial", 14))
+        self.temp_scale.set(1.0)
+        self.temp_scale.pack(pady=10, padx=20, fill=tk.X)
+
+        self.p_scale = tk.Scale(self.root, from_=0.1, to=0.99, resolution=0.01, orient=tk.HORIZONTAL, label="Nucleus Sampling (top_p)", font=("Arial", 14))
+        self.p_scale.set(0.5)
+        self.p_scale.pack(pady=10, padx=20, fill=tk.X)
+
+        # Grade Button
+        tk.Button(self.root, text="Grade", command=self.grade, font=("Arial", 14)).pack(pady=30)
+
+    def set_api_key(self):
+        try:
+            api_key_path = filedialog.askopenfilename(title="Select the API Key File", filetypes=[("Text files", "*.txt")])
+            if api_key_path:
+                self.grader.set_api_key(api_key_path)
+                self.api_key_filename_var.set(os.path.basename(api_key_path))
+                self.log("API key set successfully!")
+                messagebox.showinfo("Info", "API key set successfully!")
+        except Exception as e:
+            self.log(f"Error: {e}")
+            messagebox.showerror("Error", str(e))
+
+    def select_folder(self):
+        folder_path = filedialog.askdirectory()
+        if folder_path:
+            self.grader.select_folder(folder_path)
+            self.folder_name_var.set(os.path.basename(folder_path))
+            self.log("Folder selected successfully!")
+
+    def select_rubric(self):
+        rubric_path = filedialog.askopenfilename(title="Select the Rubric File", filetypes=[("Text files", "*.txt")])
+        if rubric_path:
+            self.grader.select_rubric(rubric_path)
+            self.rubric_filename_var.set(os.path.basename(rubric_path))
+            self.log("Rubric selected successfully!")
+
+    def select_prompt(self):
+        prompt_path = filedialog.askopenfilename(title="Select the Prompt File", filetypes=[("Text files", "*.txt")])
+        if prompt_path:
+            self.grader.select_prompt(prompt_path)
+            self.prompt_filename_var.set(os.path.basename(prompt_path))
+            self.log("Prompt selected successfully!")
+
+    def initialize_session(self):
+        reference_material_path = filedialog.askopenfilename(title="Select the Reference Material File", filetypes=[("Text files", "*.txt")])
+        if reference_material_path:
+            self.grader.initialize_session(reference_material_path)
+            self.reference_material_filename_var.set(os.path.basename(reference_material_path))
+            self.log("Session initialized successfully!")
+
+    def grade(self):
+        try:
+            result = self.grader.grade(temperature=self.temp_scale.get(), top_p=self.p_scale.get())  # Pass the temperature and top_p values from the sliders
+            self.log(result)
+            messagebox.showinfo("Info", result)
+        except Exception as e:
+            self.log(f"Error: {e}")
+            messagebox.showerror("Error", str(e))
+
+root = tk.Tk()
+app = GraderApp(root, Grader())
+root.mainloop()
