@@ -34,9 +34,6 @@ Key Features:
 Load your own grading rubric to personalize grading standards. The rubric is a simple text file that outlines the grading rules you want the system to follow. For example, you can specify how many points to deduct for incorrect grammar, spelling, or punctuation.
 
 Example Rubric:
-
-plaintext
-Copy code
 Grammar: -1 point for each error
 Spelling: -0.5 points for each mistake
 Punctuation: -0.5 points for each mistake
@@ -77,7 +74,6 @@ The grader can process multiple student essays from a folder in one batch. Simpl
 Each corrected essay will be saved with a custom filename that includes the temperature and top_p settings used during grading. This allows you to easily track how different model settings affect the output.
 
 Example Custom Filenames:
-
 T_0.2_top_p_0.1_graded_student1.txt
 T_0.8_top_p_0.9_graded_student2.txt
 In these examples, the filenames include the temperature (T) and nucleus sampling (top_p) settings, followed by the student's original filename. This helps you compare how different settings impact the grading process.
@@ -87,8 +83,6 @@ The grader generates detailed feedback for each essay, including corrections and
 
 Example Feedback:
 
-plaintext
-Copy code
 Student Essay:
 "I has a apple."
 
@@ -107,71 +101,69 @@ Load your API key for either OpenAI's GPT-4 or GPT-4o.
 Select a folder containing student essays and a grading rubric.
 Adjust the AI model settings (temperature, top_p).
 Grade essays in bulk, with corrections and detailed reports generated automatically.
+
 Requirements:
 OpenAI API Key (with GPT-4 or GPT-4o access)
 Python 3.x
 Tkinter (for the graphical user interface)
+
 Running the Application (PC and Mac)
 Step-by-Step Instructions for Beginners:
+
 1. Download and Install Python:
 PC (Windows):
-
 Go to Python's website and download Python for Windows.
 Run the installer and check the box that says "Add Python to PATH".
 Click Install and wait for the installation to complete.
-Mac:
 
+Mac:
 Go to Python's website and download Python for macOS.
 Open the .pkg installer and follow the instructions.
 Open Terminal and type python3 --version to confirm the installation.
+
 2. Download Project Isidore:
 On GitHub, click the green Code button on this repository page.
 Select Download ZIP.
 Extract the downloaded ZIP file to a folder on your computer.
+
 3. Install Required Libraries:
 PC (Windows):
-
 Open Command Prompt (search for cmd).
 Navigate to the folder where you extracted the project files. You can do this by typing cd path_to_your_folder (e.g., cd C:\Users\YourName\Downloads\IsidoreGPT).
 Type the following command and press Enter to install the required libraries:
-bash
-Copy code
 pip install openai tkinter
-Mac:
 
+Mac:
 Open Terminal (you can find it using Spotlight Search).
 Navigate to the folder where you extracted the project files by typing:
-bash
-Copy code
 cd path_to_your_folder
 (e.g., cd /Users/YourName/Downloads/IsidoreGPT)
 Type the following command and press Enter:
-bash
-Copy code
 pip3 install openai tk
+
 4. Get Your OpenAI API Key:
 Sign up or log in to OpenAI.
 Navigate to your API keys section and create a new key.
 Copy the key.
+
 5. Run the Application:
+
 PC (Windows):
-
 In Command Prompt, while still in the folder containing the project files, run the following command:
-bash
-Copy code
 python isidore_grader.py
-Mac:
 
+Mac:
 In Terminal, type the following command while in the project folder:
-bash
-Copy code
 python3 isidore_grader.py
+
 6. Enter the API Key:
 When the application starts, it will ask you to load your OpenAI API key.
 Click API Key and navigate to a text file where you’ve saved your API key (e.g., apikey.txt).
+
 7. Select Student Essays and Grading Rubric:
 Click Student Essays to select the folder containing the essays you want to grade.
 Click Rubric to select your grading rubric file.
+
 8. Start Grading:
 Adjust the model settings if needed (e.g., temperature and top_p).
 Click Grade to begin the grading process. The application will generate a detailed report for each essay.
