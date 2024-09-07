@@ -36,8 +36,6 @@ Important: This project is designed to assist with automated grading of essays u
 -   Birth dates
 -   Addresses or contact details
 
-Best Practice: Before using this tool, ensure that any identifiable information is removed from the essays. For example, replace full names with "Student A" or other pseudonyms, and avoid submitting any sensitive information through the system.
-
 **Limitation of Liability**:
 
 The author of this tool, Jonathan Graziola, and the contributors are not responsible for the misuse of this application or any violations of privacy laws that may arise from improper use. Users of this tool are solely responsible for ensuring compliance with applicable laws and for obtaining all necessary consents.
