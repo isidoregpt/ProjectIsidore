@@ -31,7 +31,7 @@ When using these tools:
     
 5.  **Scribbr AI Checker** (Free)  
     A simple AI detection tool used in academic settings.  
-    [Visit Copyleaks](https://www.scribbr.com/ai-detector/)
+    [Visit Scribbr](https://www.scribbr.com/ai-detector/)
     
 6.  **Sapling AI Detector** (Free with Paid Plans)  
     Offers fast AI detection with multiple models.  
