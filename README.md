@@ -2,7 +2,7 @@
 
 **Automated Essay Grader for Educators Using GPT-4 and GPT-4o with Custom Rubrics**
 
-**Project Isidore GPT-4 & GPT-4o Grader** is a Python-based application designed to help educators experiment with AI-assisted grading. This tool uses OpenAI's GPT-4 or GPT-4o models to automatically grade student essays in any language based on customizable grading rubrics. It provides **automated feedback**, identifies grammatical issues, incorrect word usage, and offers constructive corrections.
+**Project Isidore GPT-4 & GPT-4o Grader** is a Python-based application designed to help educators experiment with AI-assisted grading. This tool uses OpenAI's GPT-4 or GPT-4o models to automatically grade student essays in any language listed in the Languages.md file based on customizable grading rubrics. It provides **automated feedback**, identifies grammatical issues, incorrect word usage, and offers constructive corrections.
 
 ### **Important: Intended for Educational Evaluation and Testing**
 
