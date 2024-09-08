@@ -96,9 +96,9 @@ This project was created with the help of ChatGPT-4 and ChatGPT-4o, developed by
 
 ### **Requirements**
 
--   OpenAI API Key (GPT-4 or GPT-4o access)
--   Python 3.x
--   Tkinter (for the graphical user interface)
+-   OpenAI API Key (GPT-4 or GPT-4o access) https://platform.openai.com/docs/quickstart
+-   Python 3.x https://www.python.org/downloads/
+-   Tkinter (for the graphical user interface) https://docs.python.org/3/library/tkinter.html
 
 ----------
 
