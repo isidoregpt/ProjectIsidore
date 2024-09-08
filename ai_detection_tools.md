@@ -2,20 +2,20 @@ In educational settings, it's important to ensure academic integrity. Below is a
 
 1. **ZeroGPT**  
    A powerful AI content detection tool with unlimited text analysis.  
-   [Visit ZeroGPT](https://zerogpt.com){:target="_blank"}
+   [Visit ZeroGPT](https://zerogpt.com)
 
 2. **ContentDetector.ai**  
    Provides real-time content analysis and a built-in document editor.  
-   [Visit ContentDetector.ai](https://contentdetector.ai){:target="_blank"}
+   [Visit ContentDetector.ai](https://contentdetector.ai)
 
 3. **Copyleaks AI Detector**  
    Detects AI-generated content and offers plagiarism detection.  
-   [Visit Copyleaks](https://copyleaks.com){:target="_blank"}
+   [Visit Copyleaks](https://copyleaks.com)
 
 4. **Scribbr AI Checker**  
    Widely used in academic settings, Scribbr provides simple AI detection.  
-   [Visit Scribbr](https://www.scribbr.com/ai-checker){:target="_blank"}
+   [Visit Scribbr](https://www.scribbr.com/ai-checker)
 
 5. **Sapling AI Detector**  
    Offers fast AI detection with support for multiple AI models.  
-   [Visit Sapling](https://sapling.ai){:target="_blank"}
+   [Visit Sapling](https://sapling.ai)
