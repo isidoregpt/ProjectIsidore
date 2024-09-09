@@ -141,20 +141,12 @@ If an assignment requires students to reference external materials (e.g., articl
     -   Extract the files to your preferred folder.
 3.  **Install Required Libraries**:
     
-    -   Windows:
-        
-        bash
-        
-        Copy code
+    -   Windows:       
         
         `pip install openai tkinter` 
         
-    -   macOS:
-        
-        bash
-        
-        Copy code
-        
+    -   macOS:      
+      
         `pip3 install openai tk` 
         
 4.  **Get Your OpenAI API Key**:
