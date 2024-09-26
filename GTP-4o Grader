@@ -19,7 +19,7 @@
 
 
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, Entry, ttk
 import os
 import openai
 import datetime
@@ -29,7 +29,7 @@ class Grader:
         self.api_key = None
         self.prompt_path = None
         self.rubric_path = None
-        self.reference_material = None
+        self.reference_material = None  # Initialize reference material
         self.folder_path = None
         self.temperature = 1.0  # Default value for temperature
         self.top_p = 0.5  # Default value for nucleus sampling
@@ -73,7 +73,8 @@ class Grader:
                 grading_request = (
                     "The following is an uncorrected student essay that contains grammatical and spelling mistakes. "
                     "Please correct the essay based on the provided rubric and reference material. "
-                    "For each correction, place the corrected text in the 'Corrected Essay' section and indicate the mistakes with point deductions in parentheses next to the mistake. "
+                    "For each correction, place the corrected text in the "
+                    "'Corrected Essay' section and indicate the mistakes with point deductions in parentheses next to the mistake. "
                     "Do not repeat or omit any part of the original essay. Summarize the total points deducted at the end. "
                     "\n\nReference Material:\n{reference_material}\n\nPrompt:\n{prompt}\n\nStudent Essay (contains errors):\n{essay_content}\n\nRubric:\n{rubric}"
                 ).format(
@@ -84,7 +85,7 @@ class Grader:
                 )
                 
                 response = openai.ChatCompletion.create(
-                    model="gpt-4",  # Updated model name to a valid one
+                    model="gpt-4o",  # Updated model name to gpt-4o
                     messages=[
                         {"role": "system", "content": "You are a helpful assistant that grades and corrects essays."},
                         {"role": "user", "content": grading_request}
@@ -96,9 +97,8 @@ class Grader:
 
             graded_file_path = os.path.join(self.folder_path, f"T_{self.temperature}_top_p_{self.top_p}_graded_{filename}")
             with open(graded_file_path, 'w', encoding='utf-8') as file:
-                # Output format with the correct spacing
-                file.write(f"Student Essay:\n\n{original_essay_content}\n\n")
-                file.write(f"{essay_content}\n\n")
+                # Output format with "Student Essay" and cleaned "Corrected Essay"
+                file.write(f"Student Essay:\n\n{original_essay_content}\n\n{essay_content}")
 
         return "Grading completed!"
 
@@ -118,11 +118,11 @@ class GraderApp:
             f.write(message + "\n")
 
     def setup_ui(self):
-        self.root.title("Project Isidore GPT-4")
+        self.root.title("Project Isidore GPT-4o")
         self.root.geometry('1200x900')
 
         # Title
-        title_label = tk.Label(self.root, text="Project Isidore GPT-4", font=("Helvetica", 48))
+        title_label = tk.Label(self.root, text="Project Isidore GPT-4o", font=("Helvetica", 48))
         title_label.pack(pady=30)
 
         # API Key Selection
@@ -201,11 +201,11 @@ class GraderApp:
         if reference_material_path:
             self.grader.initialize_session(reference_material_path)
             self.reference_material_filename_var.set(os.path.basename(reference_material_path))
-            self.log("Session initialized successfully!")
+            self.log("Reference material loaded successfully!")
 
     def grade(self):
         try:
-            result = self.grader.grade(temperature=self.temp_scale.get(), top_p=self.p_scale.get())  # Pass the temperature and top_p values from the sliders
+            result = self.grader.grade(temperature=self.temp_scale.get(), top_p=self.p_scale.get())
             self.log(result)
             messagebox.showinfo("Info", result)
         except Exception as e:
@@ -215,3 +215,4 @@ class GraderApp:
 root = tk.Tk()
 app = GraderApp(root, Grader())
 root.mainloop()
+
