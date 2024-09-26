@@ -19,7 +19,7 @@
 
 
 import tkinter as tk
-from tkinter import filedialog, messagebox, Entry, ttk
+from tkinter import filedialog, messagebox
 import os
 import openai
 import datetime
@@ -29,7 +29,7 @@ class Grader:
         self.api_key = None
         self.prompt_path = None
         self.rubric_path = None
-        self.session = None
+        self.reference_material = None
         self.folder_path = None
         self.temperature = 1.0  # Default value for temperature
         self.top_p = 0.5  # Default value for nucleus sampling
@@ -48,7 +48,8 @@ class Grader:
         self.rubric_content = self._read_content_from_file(rubric_path)
 
     def initialize_session(self, reference_material_path):
-        self.session = "Initialized with reference material"
+        with open(reference_material_path, 'r', encoding='utf-8') as file:
+            self.reference_material = file.read()
 
     def select_folder(self, folder_path):
         self.folder_path = folder_path
@@ -56,7 +57,7 @@ class Grader:
     def grade(self, iterations=2, temperature=1.0, top_p=0.5):
         self.temperature = temperature
         self.top_p = top_p
-        if not all([self.api_key, self.prompt_path, self.rubric_path, self.session, self.folder_path]):
+        if not all([self.api_key, self.prompt_path, self.rubric_path, self.reference_material, self.folder_path]):
             raise Exception("Ensure all data has been loaded before grading.")
         
         rubric = self.rubric_content
@@ -71,16 +72,21 @@ class Grader:
             for _ in range(iterations):
                 grading_request = (
                     "The following is an uncorrected student essay that contains grammatical and spelling mistakes. "
-                    "Please correct the essay based on the provided rubric. For each correction, place the corrected text in the "
-                    "'Corrected Essay' section and indicate the mistakes with point deductions in parentheses next to the mistake. "
+                    "Please correct the essay based on the provided rubric and reference material. "
+                    "For each correction, place the corrected text in the 'Corrected Essay' section and indicate the mistakes with point deductions in parentheses next to the mistake. "
                     "Do not repeat or omit any part of the original essay. Summarize the total points deducted at the end. "
-                    "\n\nPrompt:\n{prompt}\n\nStudent Essay (contains errors):\n{essay_content}\n\nRubric:\n{rubric}"
-                ).format(prompt=prompt, essay_content=essay_content, rubric=rubric)
+                    "\n\nReference Material:\n{reference_material}\n\nPrompt:\n{prompt}\n\nStudent Essay (contains errors):\n{essay_content}\n\nRubric:\n{rubric}"
+                ).format(
+                    reference_material=self.reference_material,
+                    prompt=prompt,
+                    essay_content=essay_content,
+                    rubric=rubric
+                )
                 
                 response = openai.ChatCompletion.create(
-                    model="gpt-4o",  # This is where we specify GPT-4o model
+                    model="gpt-4",  # Updated model name to a valid one
                     messages=[
-                        {"role": "system", "content": f"You are a helpful assistant that grades and corrects essays."},
+                        {"role": "system", "content": "You are a helpful assistant that grades and corrects essays."},
                         {"role": "user", "content": grading_request}
                     ],
                     temperature=self.temperature,
@@ -93,7 +99,6 @@ class Grader:
                 # Output format with the correct spacing
                 file.write(f"Student Essay:\n\n{original_essay_content}\n\n")
                 file.write(f"{essay_content}\n\n")
-                # Removed "Corrected Essay" and "Point Deductions" for clarity
 
         return "Grading completed!"
 
@@ -113,11 +118,11 @@ class GraderApp:
             f.write(message + "\n")
 
     def setup_ui(self):
-        self.root.title("Project Isidore GPT-4o")
+        self.root.title("Project Isidore GPT-4")
         self.root.geometry('1200x900')
 
         # Title
-        title_label = tk.Label(self.root, text="Project Isidore GPT-4o", font=("Helvetica", 48))
+        title_label = tk.Label(self.root, text="Project Isidore GPT-4", font=("Helvetica", 48))
         title_label.pack(pady=30)
 
         # API Key Selection
