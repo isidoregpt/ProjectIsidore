@@ -120,7 +120,7 @@ After uploading all files and setting the parameters, click this button. The app
         )
     
     # About Expander (below Instructions)
-    with st.expander("About"):
+    with st.expander("Privacy and About"):
         st.markdown(
             """
 **Automated Essay Grader for Educators using GPT-4o with Custom Rubrics.**
