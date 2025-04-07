@@ -37,7 +37,8 @@ class Grader:
         graded_essays = {}
         for essay_file in essay_files:
             filename = essay_file.name
-            original_essay_content = essay_file.read().decode("utf-8")
+            # Decode with error replacement to handle invalid UTF-8 bytes.
+            original_essay_content = essay_file.read().decode("utf-8", errors="replace")
             essay_content = original_essay_content
 
             for _ in range(iterations):
@@ -120,7 +121,7 @@ After uploading all files and setting the parameters, click this button. The app
         )
     
     # About Expander (below Instructions)
-    with st.expander("Privacy and About"):
+    with st.expander("About"):
         st.markdown(
             """
 **Automated Essay Grader for Educators using GPT-4o with Custom Rubrics.**
@@ -200,11 +201,12 @@ Files are processed in memory during your session, and the output is available f
             st.error("Please upload all required files before grading.")
         else:
             try:
+                # Decode each uploaded file with errors replaced
                 grader = Grader()
-                grader.set_api_key(api_key_file.read().decode("utf-8"))
-                grader.set_prompt(prompt_file.read().decode("utf-8"))
-                grader.set_rubric(rubric_file.read().decode("utf-8"))
-                grader.set_reference_material(reference_file.read().decode("utf-8"))
+                grader.set_api_key(api_key_file.read().decode("utf-8", errors="replace"))
+                grader.set_prompt(prompt_file.read().decode("utf-8", errors="replace"))
+                grader.set_rubric(rubric_file.read().decode("utf-8", errors="replace"))
+                grader.set_reference_material(reference_file.read().decode("utf-8", errors="replace"))
 
                 with st.spinner("Grading essays..."):
                     graded_essays = grader.grade(essay_files, iterations=iterations, temperature=temperature, top_p=top_p)
