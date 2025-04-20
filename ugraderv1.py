@@ -135,7 +135,7 @@ class ModelManager:
             st.warning(f"Vector store search had an issue: {e}")
             return None, False
     
-    def grade_essay_with_openai(self, model, prompt, rubric, reference, essay, temperature=0.7, top_p=0.9):
+    def grade_essay_with_openai(self, model, prompt, rubric, reference, essay, temperature=0.1, top_p=0.9):
         """Grade an essay using an OpenAI model with retrieved context"""
         try:
             # Try to get relevant context from vector store
