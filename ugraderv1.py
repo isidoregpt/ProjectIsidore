@@ -41,7 +41,9 @@ class ModelManager:
         """Create vector store for retrieval-augmented grading"""
         try:
             # Create a new vector store
-            vs = self.openai_client.vector_stores.create(name="Essay Grading Context")
+            vs = self.openai_client.vector_stores.create(
+                name="Essay Grading Context"
+            )
             self.vector_store_id = vs.id
             
             # Save context files temporarily
@@ -56,8 +58,9 @@ class ModelManager:
                 with open(name, "w", encoding="utf-8") as f:
                     f.write(content)
                 with open(name, "rb") as f:
+                    # Use the upload_and_poll method to ensure file processing completes
                     self.openai_client.vector_stores.files.upload_and_poll(
-                        vector_store_id=self.vector_store_id, 
+                        vector_store_id=self.vector_store_id,
                         file=f
                     )
                     
@@ -72,18 +75,62 @@ class ModelManager:
             st.error(f"Error creating vector store: {e}")
             return False
     
-    def grade_essay_with_openai(self, model, prompt, rubric, reference, essay, temperature=0.7, top_p=0.9):
-        """Grade an essay using an OpenAI model with retrieval"""
+    def get_vector_store_results(self, essay):
+        """Perform a vector store search to get relevant context for grading"""
         try:
-            grading_request = (
-                f"Prompt:\n{prompt}\n\n"
-                f"Reference Material:\n{reference}\n\n"
-                f"Rubric:\n{rubric}\n\n"
-                f"Essay to grade:\n{essay}\n\n"
-                "Grade this essay according to the rubric and reference material provided. "
-                "Be specific about points deducted and explain why. "
-                "First provide a detailed analysis, then summarize with total points deducted at the end."
+            if not self.vector_store_id:
+                return None
+                
+            # Create a search query based on the essay content
+            search_query = f"What criteria from the rubric apply to this essay? {essay[:200]}..."
+            
+            # Search the vector store
+            results = self.openai_client.vector_stores.search(
+                vector_store_id=self.vector_store_id,
+                query=search_query,
+                max_num_results=5  # Limit to most relevant results
             )
+            
+            # Format results for inclusion in the prompt
+            formatted_results = []
+            for result in results.data:
+                content_text = "\n".join([part.text for part in result.content])
+                formatted_results.append(f"From {result.filename}:\n{content_text}")
+            
+            return "\n\n".join(formatted_results)
+        except Exception as e:
+            st.warning(f"Vector store search had an issue: {e}")
+            return None
+    
+    def grade_essay_with_openai(self, model, prompt, rubric, reference, essay, temperature=0.7, top_p=0.9):
+        """Grade an essay using an OpenAI model with retrieved context"""
+        try:
+            # Try to get relevant context from vector store
+            vector_store_context = self.get_vector_store_results(essay)
+            
+            # Prepare the grading request
+            if vector_store_context:
+                grading_request = (
+                    f"Prompt:\n{prompt}\n\n"
+                    f"Reference Material:\n{reference}\n\n"
+                    f"Rubric:\n{rubric}\n\n"
+                    f"Relevant Context:\n{vector_store_context}\n\n"
+                    f"Essay to grade:\n{essay}\n\n"
+                    "Grade this essay according to the rubric and reference material provided. "
+                    "Be specific about points deducted and explain why. "
+                    "First provide a detailed analysis, then summarize with total points deducted at the end."
+                )
+            else:
+                # Fallback to standard prompt if vector store retrieval fails
+                grading_request = (
+                    f"Prompt:\n{prompt}\n\n"
+                    f"Reference Material:\n{reference}\n\n"
+                    f"Rubric:\n{rubric}\n\n"
+                    f"Essay to grade:\n{essay}\n\n"
+                    "Grade this essay according to the rubric and reference material provided. "
+                    "Be specific about points deducted and explain why. "
+                    "First provide a detailed analysis, then summarize with total points deducted at the end."
+                )
             
             # Base request parameters
             request_params = {
@@ -93,15 +140,6 @@ class ModelManager:
                     {"role": "user", "content": grading_request}
                 ]
             }
-            
-            # Add vector store context if available
-            if self.vector_store_id:
-                request_params["tools"] = [{
-                    "type": "retrieval",
-                    "retrieval": {
-                        "vector_store_ids": [self.vector_store_id]
-                    }
-                }]
             
             # Handle special cases for different model types
             if "o1" in model or "o3-mini" in model or "o4-mini" in model:
@@ -121,17 +159,32 @@ class ModelManager:
     def grade_essay_with_anthropic(self, model, prompt, rubric, reference, essay, temperature=0.7):
         """Grade an essay using an Anthropic model"""
         try:
-            # Note: Anthropic doesn't support the same vector store retrieval as OpenAI,
-            # so we include all context directly in the prompt
-            grading_request = (
-                f"Prompt:\n{prompt}\n\n"
-                f"Reference Material:\n{reference}\n\n"
-                f"Rubric:\n{rubric}\n\n"
-                f"Essay to grade:\n{essay}\n\n"
-                "Grade this essay according to the rubric and reference material provided. "
-                "Be specific about points deducted and explain why. "
-                "First provide a detailed analysis, then summarize with total points deducted at the end."
-            )
+            # Try to get relevant context from vector store
+            vector_store_context = self.get_vector_store_results(essay)
+            
+            # Prepare the grading request
+            if vector_store_context:
+                grading_request = (
+                    f"Prompt:\n{prompt}\n\n"
+                    f"Reference Material:\n{reference}\n\n"
+                    f"Rubric:\n{rubric}\n\n"
+                    f"Relevant Context:\n{vector_store_context}\n\n"
+                    f"Essay to grade:\n{essay}\n\n"
+                    "Grade this essay according to the rubric and reference material provided. "
+                    "Be specific about points deducted and explain why. "
+                    "First provide a detailed analysis, then summarize with total points deducted at the end."
+                )
+            else:
+                # Fallback to standard prompt if vector store retrieval fails
+                grading_request = (
+                    f"Prompt:\n{prompt}\n\n"
+                    f"Reference Material:\n{reference}\n\n"
+                    f"Rubric:\n{rubric}\n\n"
+                    f"Essay to grade:\n{essay}\n\n"
+                    "Grade this essay according to the rubric and reference material provided. "
+                    "Be specific about points deducted and explain why. "
+                    "First provide a detailed analysis, then summarize with total points deducted at the end."
+                )
             
             headers = {
                 "Content-Type": "application/json",
@@ -213,7 +266,7 @@ def display_comparison_table(results):
 
 def main():
     st.set_page_config(page_title="Multi-Model Essay Grader", layout="wide")
-    st.title("🤖 Multi-Model Essay Grader with Retrieval & Comparison")
+    st.title("🤖 Multi-Model Essay Grader with Vector Search")
 
     with st.expander("ℹ️ Instructions"):
         st.markdown("""
@@ -221,7 +274,7 @@ This tool grades essays using multiple AI models and compares outputs.
 1. Upload your API Key, Prompt, Rubric, Reference, and Essays
 2. Choose models and adjust temperature settings
 3. Click "Grade Essays" to begin the process
-4. Vector store context will improve grading consistency
+4. Vector store retrieval enhances grading consistency
 5. Export results as Text, PDF, or ZIP
 """)
 
@@ -284,9 +337,13 @@ This tool grades essays using multiple AI models and compares outputs.
                 # Initialize the model manager with the API key
                 model_manager = ModelManager(api_key)
                 
-                # Create vector store for context (seamless to the user)
-                with st.spinner("Preparing grading context..."):
-                    model_manager.create_vector_store(prompt, rubric, reference)
+                # Create vector store for semantic search
+                with st.spinner("Creating vector store for semantic search..."):
+                    vector_store_created = model_manager.create_vector_store(prompt, rubric, reference)
+                    if vector_store_created:
+                        st.success("Vector store created successfully.")
+                    else:
+                        st.warning("Vector store creation skipped - continuing with standard grading.")
                 
                 all_pdfs = []
 
