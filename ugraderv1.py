@@ -395,6 +395,7 @@ def main():
     st.set_page_config(page_title="Multi-Model Essay Grader", layout="wide")
     st.title("🤖 Multi-Model Essay Grader with Vector Search")
 
+    # Instructions Expander
     with st.expander("ℹ️ Instructions"):
         st.markdown("""
 This tool grades essays using multiple AI models and compares outputs.
@@ -405,6 +406,49 @@ This tool grades essays using multiple AI models and compares outputs.
 5. Export results as a ZIP file containing TXT, PDF, and CSV formats
 6. RAG Status shows whether Vector Store and Retrieval worked for each model
 """)
+
+    # About Expander
+    with st.expander("About"):
+        st.markdown(
+            """
+**Multi-Model Essay Grader with Retrieval-Augmented Generation**
+
+The Multi-Model Essay Grader is a Python-based application designed to help educators experiment with AI-assisted grading across multiple AI models simultaneously. This tool can leverage both OpenAI and Anthropic models to automatically grade student essays based on customizable prompts, rubrics, and reference materials.
+
+**Key Features:**
+- **Multi-Model Comparison:** Grade essays with different AI models side-by-side to compare approaches and results
+- **Vector Store Technology:** Employs OpenAI's vector stores for semantic search and retrieval
+- **Retrieval-Augmented Generation (RAG):** Enhances grading accuracy by retrieving relevant context from rubrics and reference materials
+- **Comprehensive Output:** Provides detailed feedback with points deducted and reasoning
+- **Consolidated Results:** Download all grading results in multiple formats (TXT, PDF, CSV) as a single ZIP file
+
+**How Vector Storage Works:**
+This application creates a vector store containing your prompt, rubric, and reference materials. These documents are converted into numerical representations (vectors) that capture their semantic meaning. When grading an essay, the system searches this vector store to find the most relevant criteria from your rubric that apply to the specific essay content, providing more targeted and consistent grading.
+
+**RAG Functionality:**
+Retrieval-Augmented Generation (RAG) combines retrieval of relevant information with AI text generation. For each essay, the system:
+1. Searches the vector store for relevant rubric criteria and reference materials
+2. Incorporates this retrieved context into the prompt sent to the AI model
+3. Tracks whether RAG was successful for each model's evaluation
+4. Displays the RAG status in both the interface and downloaded results
+
+**Data Privacy:**
+- Files are processed in memory during your session
+- No data is permanently stored on servers
+- Vector stores exist only for the duration of your session
+- Only data sent to the selected API providers (OpenAI/Anthropic) is transmitted externally
+- The application does not save or retain any student essays or grading results
+
+**Important Note:**  
+This tool is provided as an evaluation and testing tool for educators to explore the possibilities of AI in grading. It is not intended to replace traditional grading methods but rather to assist educators in experimenting with AI-driven feedback. Educators retain full control over final grades and should use the tool to supplement, not replace, human judgment.
+
+**Acknowledgment:**  
+This project was created by Jonathan Graziola (isidore.gpt@gmail.com) and is licensed under the GNU General Public License v3.0.
+
+**Disclaimer:**  
+When using this tool, users must comply with applicable privacy laws such as FERPA in the United States and GDPR in Europe. We recommend anonymizing all student essays by removing personally identifiable information before uploading.
+            """
+        )
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
