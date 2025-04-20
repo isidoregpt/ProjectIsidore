@@ -41,9 +41,45 @@ class ModelManager:
     def __init__(self, api_key):
         self.api_key = api_key
         self.openai_client = OpenAI(api_key=api_key)
+        self.vector_store_id = None
         
+    def create_vector_store(self, prompt, rubric, reference):
+        """Create vector store for retrieval-augmented grading"""
+        try:
+            # Create a new vector store
+            vs = self.openai_client.vector_stores.create(name="Essay Grading Context")
+            self.vector_store_id = vs.id
+            
+            # Save context files temporarily
+            context_files = {
+                "prompt.txt": prompt,
+                "rubric.txt": rubric,
+                "reference.txt": reference
+            }
+            
+            # Upload each file to the vector store
+            for name, content in context_files.items():
+                with open(name, "w", encoding="utf-8") as f:
+                    f.write(content)
+                with open(name, "rb") as f:
+                    self.openai_client.vector_stores.files.upload_and_poll(
+                        vector_store_id=self.vector_store_id, 
+                        file=f
+                    )
+                    
+                # Clean up temporary file
+                try:
+                    os.remove(name)
+                except:
+                    pass
+                    
+            return True
+        except Exception as e:
+            st.error(f"Error creating vector store: {e}")
+            return False
+    
     def grade_essay_with_openai(self, model, prompt, rubric, reference, essay, temperature=0.7, top_p=0.9):
-        """Grade an essay using an OpenAI model"""
+        """Grade an essay using an OpenAI model with retrieval"""
         try:
             grading_request = (
                 f"Prompt:\n{prompt}\n\n"
@@ -64,6 +100,15 @@ class ModelManager:
                 ]
             }
             
+            # Add vector store context if available
+            if self.vector_store_id:
+                request_params["tools"] = [{
+                    "type": "retrieval",
+                    "retrieval": {
+                        "vector_store_ids": [self.vector_store_id]
+                    }
+                }]
+            
             # Handle special cases for different model types
             if "o1" in model or "o3-mini" in model or "o4-mini" in model:
                 # These models don't support temperature or might have restrictions
@@ -82,9 +127,8 @@ class ModelManager:
     def grade_essay_with_anthropic(self, model, prompt, rubric, reference, essay, temperature=0.7):
         """Grade an essay using an Anthropic model"""
         try:
-            # Anthropic API endpoint
-            url = "https://api.anthropic.com/v1/messages"
-            
+            # Note: Anthropic doesn't support the same vector store retrieval as OpenAI,
+            # so we include all context directly in the prompt
             grading_request = (
                 f"Prompt:\n{prompt}\n\n"
                 f"Reference Material:\n{reference}\n\n"
@@ -110,7 +154,7 @@ class ModelManager:
                 "max_tokens": 4000
             }
             
-            response = requests.post(url, json=data, headers=headers)
+            response = requests.post("https://api.anthropic.com/v1/messages", json=data, headers=headers)
             response.raise_for_status()
             
             return response.json()["content"][0]["text"]
@@ -175,7 +219,7 @@ def display_comparison_table(results):
 
 def main():
     st.set_page_config(page_title="Multi-Model Essay Grader", layout="wide")
-    st.title("🤖 Multi-Model Essay Grader with Comparison")
+    st.title("🤖 Multi-Model Essay Grader with Retrieval & Comparison")
 
     with st.expander("ℹ️ Instructions"):
         st.markdown("""
@@ -183,7 +227,8 @@ This tool grades essays using multiple AI models and compares outputs.
 1. Upload your Prompt, Rubric, Reference, and Essays
 2. Select saved or custom rubric
 3. Choose models and settings
-4. Export results as PDF or ZIP
+4. Vector store context will improve grading consistency
+5. Export results as PDF or ZIP
 """)
 
     col1, col2, col3, col4 = st.columns(4)
@@ -255,7 +300,13 @@ This tool grades essays using multiple AI models and compares outputs.
                     st.error("Please select or upload a rubric.")
                     return
                 
+                # Initialize the model manager with the API key
                 model_manager = ModelManager(api_key)
+                
+                # Create vector store for context (seamless to the user)
+                with st.spinner("Preparing grading context..."):
+                    model_manager.create_vector_store(prompt, rubric, reference)
+                
                 all_pdfs = []
 
                 for i, essay_text in enumerate(essay_files):
