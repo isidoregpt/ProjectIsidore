@@ -3,6 +3,7 @@ import datetime
 import io
 import zipfile
 import os
+import tempfile
 from fpdf import FPDF
 import pandas as pd
 from openai import OpenAI
@@ -53,20 +54,26 @@ class ModelManager:
                 "reference.txt": reference
             }
             
-            # Upload each file to the vector store
+            # Use tempfile to safely handle encoding issues
             for name, content in context_files.items():
-                with open(name, "w", encoding="utf-8") as f:
+                with tempfile.NamedTemporaryFile(suffix=".txt", mode="w+", encoding="utf-8", delete=False) as f:
                     f.write(content)
-                with open(name, "rb") as f:
-                    # Use the upload_and_poll method to ensure file processing completes
-                    self.openai_client.vector_stores.files.upload_and_poll(
-                        vector_store_id=self.vector_store_id,
-                        file=f
-                    )
-                    
+                    temp_filename = f.name
+                
+                # Reopen in binary mode for upload
+                with open(temp_filename, "rb") as f:
+                    try:
+                        # Use the upload_and_poll method to ensure file processing completes
+                        self.openai_client.vector_stores.files.upload_and_poll(
+                            vector_store_id=self.vector_store_id,
+                            file=f
+                        )
+                    except Exception as upload_error:
+                        st.warning(f"Error uploading {name}: {upload_error}")
+                
                 # Clean up temporary file
                 try:
-                    os.remove(name)
+                    os.remove(temp_filename)
                 except:
                     pass
                     
@@ -80,9 +87,11 @@ class ModelManager:
         try:
             if not self.vector_store_id:
                 return None
-                
+            
             # Create a search query based on the essay content
-            search_query = f"What criteria from the rubric apply to this essay? {essay[:200]}..."
+            # Use only a small preview to avoid encoding issues
+            preview = essay[:100] if len(essay) > 100 else essay
+            search_query = f"What criteria from the rubric apply to this essay? {preview}"
             
             # Search the vector store
             results = self.openai_client.vector_stores.search(
@@ -220,48 +229,88 @@ class ModelManager:
 
 
 def save_pdf(essay_name, model_outputs):
+    # Use FPDF with safe encoding handling
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
+    
+    # Add a Unicode font
     pdf.add_page()
-    pdf.set_font("Arial", "B", 14)
-    pdf.cell(200, 10, f"Graded Essay: {essay_name}", ln=True, align="C")
-    pdf.set_font("Arial", size=10)
-
+    pdf.add_font('DejaVu', '', 'DejaVuSansCondensed.ttf', uni=True)
+    pdf.set_font('DejaVu', '', 14)
+    
+    # If DejaVu font is not available, fall back to standard fonts with safe text
+    if not os.path.exists('DejaVuSansCondensed.ttf'):
+        pdf.set_font('Arial', 'B', 14)
+        
+    # Create a safe title
+    safe_name = ''.join(c if ord(c) < 128 else '?' for c in essay_name)
+    pdf.cell(200, 10, f"Graded Essay: {safe_name}", ln=True, align="C")
+    
+    # Process each model's output
     for model, text in model_outputs.items():
-        pdf.set_font("Arial", "B", 12)
-        pdf.cell(200, 10, f"Model: {model}", ln=True)
-        pdf.set_font("Arial", size=10)
+        if not os.path.exists('DejaVuSansCondensed.ttf'):
+            pdf.set_font('Arial', 'B', 12)
+        else:
+            pdf.set_font('DejaVu', '', 12)
+            
+        # Create safe model name
+        safe_model = ''.join(c if ord(c) < 128 else '?' for c in model)
+        pdf.cell(200, 10, f"Model: {safe_model}", ln=True)
+        
+        if not os.path.exists('DejaVuSansCondensed.ttf'):
+            pdf.set_font('Arial', size=10)
+        else:
+            pdf.set_font('DejaVu', '', 10)
+            
+        # Process text line by line with encoding safety
         for line in text.split("\n"):
-            pdf.multi_cell(0, 5, line)
+            # Replace problematic characters
+            safe_line = ''.join(c if ord(c) < 128 else '?' for c in line)
+            pdf.multi_cell(0, 5, safe_line)
         pdf.ln()
 
-    buffer = io.BytesIO()
-    pdf.output(buffer)
-    buffer.seek(0)
-    return buffer
+    # Output to buffer
+    try:
+        buffer = io.BytesIO()
+        pdf.output(buffer)
+        buffer.seek(0)
+        return buffer
+    except Exception as e:
+        # If PDF generation fails, return a simple text buffer instead
+        st.warning(f"PDF generation failed: {e}. Using text format instead.")
+        text_buffer = io.BytesIO()
+        text_content = "\n\n".join([f"Model: {model}\n\n{content}" for model, content in model_outputs.items()])
+        text_buffer.write(text_content.encode('utf-8'))
+        text_buffer.seek(0)
+        return text_buffer
 
 
 def display_comparison_table(results):
-    total_scores = []
-    rows = []
-    for model, content in results.items():
-        lines = content.splitlines()
-        deduction_line = next((line for line in lines if "points deducted" in line.lower()), "Not Found")
-        summary = next((line for line in lines[::-1] if line.strip()), "")
-        try:
-            points = float(''.join(filter(str.isdigit, deduction_line)))
-        except:
-            points = 0
-        total_scores.append((model, points))
-        rows.append({"Model": model, "Points Deducted": deduction_line, "Summary": summary[:150]})
-    df = pd.DataFrame(rows)
-    st.dataframe(df, use_container_width=True)
+    try:
+        total_scores = []
+        rows = []
+        for model, content in results.items():
+            lines = content.splitlines()
+            deduction_line = next((line for line in lines if "points deducted" in line.lower()), "Not Found")
+            summary = next((line for line in lines[::-1] if line.strip()), "")
+            try:
+                # Extract numerical value safely
+                digits = ''.join(c for c in deduction_line if c.isdigit() or c == '.')
+                points = float(digits) if digits else 0
+            except:
+                points = 0
+            total_scores.append((model, points))
+            rows.append({"Model": model, "Points Deducted": deduction_line, "Summary": summary[:150]})
+        df = pd.DataFrame(rows)
+        st.dataframe(df, use_container_width=True)
 
-    if total_scores:
-        st.subheader("📊 Average Points Deducted")
-        score_df = pd.DataFrame(total_scores, columns=["Model", "Points Deducted"])
-        avg = score_df.groupby("Model")["Points Deducted"].mean().reset_index()
-        st.table(avg)
+        if total_scores:
+            st.subheader("📊 Average Points Deducted")
+            score_df = pd.DataFrame(total_scores, columns=["Model", "Points Deducted"])
+            avg = score_df.groupby("Model")["Points Deducted"].mean().reset_index()
+            st.table(avg)
+    except Exception as e:
+        st.error(f"Error displaying comparison table: {e}")
 
 
 def main():
@@ -296,14 +345,25 @@ This tool grades essays using multiple AI models and compares outputs.
     essay_names = []
     
     if essay_zip:
-        with zipfile.ZipFile(essay_zip) as z:
-            essay_names = [f for f in z.namelist() if f.endswith(".txt")]
-            essay_files = [z.read(f).decode("utf-8") for f in essay_names]
+        try:
+            with zipfile.ZipFile(essay_zip) as z:
+                essay_names = [f for f in z.namelist() if f.endswith(".txt")]
+                # Use 'replace' for decoding errors
+                essay_files = [z.read(f).decode("utf-8", errors="replace") for f in essay_names]
+        except Exception as e:
+            st.error(f"Error reading ZIP file: {e}")
     else:
         uploaded_files = st.file_uploader("📂 Upload one or more student essays", type=["txt"], accept_multiple_files=True)
         if uploaded_files:
             essay_names = [f.name for f in uploaded_files]
-            essay_files = [f.read().decode("utf-8") for f in uploaded_files]
+            essay_files = []
+            for f in uploaded_files:
+                try:
+                    # Use 'replace' for decoding errors
+                    essay_files.append(f.read().decode("utf-8", errors="replace"))
+                except Exception as e:
+                    st.error(f"Error reading file {f.name}: {e}")
+                    essay_files.append(f"[Error reading file: {str(e)}]")
 
     st.markdown("---")
     st.subheader("🤖 Choose Models for Grading")
@@ -329,10 +389,15 @@ This tool grades essays using multiple AI models and compares outputs.
             st.error("Please upload all required files and select at least one model.")
         else:
             try:
-                api_key = api_key_file.read().decode("utf-8").strip()
-                prompt = prompt_file.read().decode("utf-8")
-                rubric = rubric_file.read().decode("utf-8")
-                reference = reference_file.read().decode("utf-8")
+                # Read files with error handling
+                try:
+                    api_key = api_key_file.read().decode("utf-8", errors="replace").strip()
+                    prompt = prompt_file.read().decode("utf-8", errors="replace")
+                    rubric = rubric_file.read().decode("utf-8", errors="replace")
+                    reference = reference_file.read().decode("utf-8", errors="replace")
+                except Exception as e:
+                    st.error(f"Error reading input files: {e}")
+                    return
                 
                 # Initialize the model manager with the API key
                 model_manager = ModelManager(api_key)
@@ -346,9 +411,13 @@ This tool grades essays using multiple AI models and compares outputs.
                         st.warning("Vector store creation skipped - continuing with standard grading.")
                 
                 all_pdfs = []
+                all_texts = []
 
                 for i, essay_text in enumerate(essay_files):
-                    essay_name = essay_names[i] if i < len(essay_names) else f"essay_{i+1}.txt"
+                    if i >= len(essay_names):
+                        essay_name = f"essay_{i+1}.txt"
+                    else:
+                        essay_name = essay_names[i]
                     
                     results = {}
                     progress_bar = st.progress(0)
@@ -372,18 +441,22 @@ This tool grades essays using multiple AI models and compares outputs.
                             model_top_p = None
                         
                         # Grade essay with the selected model
-                        graded_content = model_manager.grade_essay(
-                            provider, 
-                            model, 
-                            prompt, 
-                            rubric, 
-                            reference, 
-                            essay_text,
-                            temperature=model_temp,
-                            top_p=model_top_p if model_top_p is not None else 0.9
-                        )
+                        try:
+                            graded_content = model_manager.grade_essay(
+                                provider, 
+                                model, 
+                                prompt, 
+                                rubric, 
+                                reference, 
+                                essay_text,
+                                temperature=model_temp,
+                                top_p=model_top_p if model_top_p is not None else 0.9
+                            )
+                            results[f"{provider} - {model}"] = graded_content
+                        except Exception as e:
+                            results[f"{provider} - {model}"] = f"Error grading: {str(e)}"
+                            st.error(f"Error grading with {provider} {model}: {e}")
                         
-                        results[f"{provider} - {model}"] = graded_content
                         progress_bar.progress((idx + 1) / len(selected_models))
                         
                         # Add a small delay to avoid rate limits
@@ -395,35 +468,58 @@ This tool grades essays using multiple AI models and compares outputs.
                     st.subheader(f"📝 Results for {essay_name}")
                     display_comparison_table(results)
                     
-                    # Save original essay content and graded results for download
-                    original_and_graded = f"ORIGINAL ESSAY:\n\n{essay_text}\n\n" + "\n\n".join([f"=== GRADED BY {model} ===\n\n{content}" for model, content in results.items()])
-                    st.download_button(
-                        "📄 Download Text Results",
-                        data=original_and_graded,
-                        file_name=f"graded_{essay_name}.txt",
-                        mime="text/plain",
-                        key=f"text_{essay_name}"
-                    )
+                    # Save original essay content and graded results for download (UTF-8 encoded)
+                    try:
+                        original_and_graded = f"ORIGINAL ESSAY:\n\n{essay_text}\n\n" + "\n\n".join([f"=== GRADED BY {model} ===\n\n{content}" for model, content in results.items()])
+                        bytes_data = original_and_graded.encode('utf-8')
+                        
+                        st.download_button(
+                            "📄 Download Text Results",
+                            data=bytes_data,
+                            file_name=f"graded_{essay_name}.txt",
+                            mime="text/plain",
+                            key=f"text_{essay_name}"
+                        )
+                        all_texts.append((essay_name, bytes_data))
+                    except Exception as e:
+                        st.error(f"Error creating text download: {e}")
                     
                     # Also provide PDF download
-                    pdf = save_pdf(essay_name, results)
-                    all_pdfs.append((essay_name, pdf))
-                    st.download_button(
-                        "📥 Download as PDF", 
-                        data=pdf, 
-                        file_name=f"graded_{essay_name}.pdf", 
-                        mime="application/pdf",
-                        key=f"pdf_{essay_name}"
-                    )
+                    try:
+                        pdf = save_pdf(essay_name, results)
+                        all_pdfs.append((essay_name, pdf))
+                        st.download_button(
+                            "📥 Download as PDF", 
+                            data=pdf, 
+                            file_name=f"graded_{essay_name}.pdf", 
+                            mime="application/pdf",
+                            key=f"pdf_{essay_name}"
+                        )
+                    except Exception as e:
+                        st.error(f"Error creating PDF: {e}")
 
                 if len(all_pdfs) > 1:  # Only create ZIP if multiple essays
-                    zip_output = io.BytesIO()
-                    with zipfile.ZipFile(zip_output, "w", zipfile.ZIP_DEFLATED) as zipf:
-                        for name, pdf in all_pdfs:
-                            pdf.seek(0)  # Ensure we're at the start of the PDF data
-                            zipf.writestr(f"{name}.pdf", pdf.read())
-                    zip_output.seek(0)
-                    st.download_button("📦 Download All as ZIP", data=zip_output, file_name="all_graded_essays.zip", mime="application/zip")
+                    try:
+                        zip_output = io.BytesIO()
+                        with zipfile.ZipFile(zip_output, "w", zipfile.ZIP_DEFLATED) as zipf:
+                            # Add PDFs
+                            for name, pdf in all_pdfs:
+                                pdf.seek(0)  # Ensure we're at the start of the PDF data
+                                zipf.writestr(f"{name}.pdf", pdf.read())
+                                
+                            # Also add text versions
+                            for name, text_data in all_texts:
+                                zipf.writestr(f"{name}.txt", text_data)
+                                
+                        zip_output.seek(0)
+                        st.download_button(
+                            "📦 Download All as ZIP", 
+                            data=zip_output, 
+                            file_name="all_graded_essays.zip", 
+                            mime="application/zip"
+                        )
+                    except Exception as e:
+                        st.error(f"Error creating ZIP file: {e}")
 
             except Exception as e:
                 st.error(f"❌ Error grading essays: {e}")
