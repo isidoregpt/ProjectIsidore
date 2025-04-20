@@ -256,18 +256,13 @@ class ModelManager:
 
 
 def save_pdf(essay_name, model_outputs):
-    # Use FPDF with safe encoding handling
+    # Create PDF with standard fonts only
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     
-    # Add a Unicode font
+    # Add first page and set standard font
     pdf.add_page()
-    pdf.add_font('DejaVu', '', 'DejaVuSansCondensed.ttf', uni=True)
-    pdf.set_font('DejaVu', '', 14)
-    
-    # If DejaVu font is not available, fall back to standard fonts with safe text
-    if not os.path.exists('DejaVuSansCondensed.ttf'):
-        pdf.set_font('Arial', 'B', 14)
+    pdf.set_font('Arial', 'B', 14)
         
     # Create a safe title
     safe_name = ''.join(c if ord(c) < 128 else '?' for c in essay_name)
@@ -275,22 +270,19 @@ def save_pdf(essay_name, model_outputs):
     
     # Process each model's output
     for model, output_data in model_outputs.items():
-        if not os.path.exists('DejaVuSansCondensed.ttf'):
-            pdf.set_font('Arial', 'B', 12)
-        else:
-            pdf.set_font('DejaVu', '', 12)
+        # Set header font for model name
+        pdf.set_font('Arial', 'B', 12)
             
         # Create safe model name with RAG status
         safe_model = ''.join(c if ord(c) < 128 else '?' for c in model)
-        rag_status = (f"Vector Store: {'✓' if output_data['vector_store_created'] else '✗'}, "
-                      f"RAG: {'✓' if output_data['rag_success'] else '✗'}")
+        rag_status = (f"Vector Store: {'Success' if output_data['vector_store_created'] else 'Failed'}, "
+                      f"RAG: {'Success' if output_data['rag_success'] else 'Failed'}")
+        
         pdf.cell(200, 10, f"Model: {safe_model}", ln=True)
         pdf.cell(200, 10, f"RAG Status: {rag_status}", ln=True)
         
-        if not os.path.exists('DejaVuSansCondensed.ttf'):
-            pdf.set_font('Arial', size=10)
-        else:
-            pdf.set_font('DejaVu', '', 10)
+        # Set body font for content
+        pdf.set_font('Arial', '', 10)
             
         # Process text line by line with encoding safety
         for line in output_data["content"].split("\n"):
@@ -311,8 +303,8 @@ def save_pdf(essay_name, model_outputs):
         text_buffer = io.BytesIO()
         text_content = "\n\n".join([
             f"Model: {model}\n"
-            f"Vector Store: {'✓' if data['vector_store_created'] else '✗'}, "
-            f"RAG: {'✓' if data['rag_success'] else '✗'}\n\n"
+            f"Vector Store: {'Success' if data['vector_store_created'] else 'Failed'}, "
+            f"RAG: {'Success' if data['rag_success'] else 'Failed'}\n\n"
             f"{data['content']}" 
             for model, data in model_outputs.items()
         ])
@@ -346,8 +338,8 @@ def display_comparison_table(results):
             total_scores.append((model, points))
             
             # Add RAG status to the table
-            rag_status = (f"Vector Store: {'✓' if vector_store_created else '✗'}, "
-                          f"RAG: {'✓' if rag_success else '✗'}")
+            rag_status = (f"Vector Store: {'Success' if vector_store_created else 'Failed'}, "
+                          f"RAG: {'Success' if rag_success else 'Failed'}")
             
             rows.append({
                 "Model": model, 
@@ -359,14 +351,12 @@ def display_comparison_table(results):
         # Create and display the dataframe
         df = pd.DataFrame(rows)
         st.dataframe(df, use_container_width=True)
-
-        if total_scores:
-            st.subheader("📊 Average Points Deducted")
-            score_df = pd.DataFrame(total_scores, columns=["Model", "Points Deducted"])
-            avg = score_df.groupby("Model")["Points Deducted"].mean().reset_index()
-            st.table(avg)
+        
+        # Return dataframe for CSV export
+        return df
     except Exception as e:
         st.error(f"Error displaying comparison table: {e}")
+        return None
 
 
 def main():
@@ -380,7 +370,7 @@ This tool grades essays using multiple AI models and compares outputs.
 2. Choose models and adjust temperature settings
 3. Click "Grade Essays" to begin the process
 4. Vector store retrieval enhances grading consistency
-5. Export results as Text, PDF, or ZIP
+5. Export results as Text, PDF, CSV, or ZIP (containing all formats)
 6. RAG Status shows whether Vector Store and Retrieval worked for each model
 """)
 
@@ -469,6 +459,7 @@ This tool grades essays using multiple AI models and compares outputs.
                 
                 all_pdfs = []
                 all_texts = []
+                all_csvs = []
 
                 for i, essay_text in enumerate(essay_files):
                     if i >= len(essay_names):
@@ -526,8 +517,8 @@ This tool grades essays using multiple AI models and compares outputs.
                             # Update RAG status for this model
                             rag_statuses.append({
                                 "Model": f"{provider} - {model}",
-                                "Vector Store": "✓" if result["vector_store_created"] else "✗",
-                                "RAG Success": "✓" if result["rag_success"] else "✗"
+                                "Vector Store": "Success" if result["vector_store_created"] else "Failed",
+                                "RAG Success": "Success" if result["rag_success"] else "Failed"
                             })
                             
                             # Update the RAG status table as we go
@@ -542,8 +533,8 @@ This tool grades essays using multiple AI models and compares outputs.
                             
                             rag_statuses.append({
                                 "Model": f"{provider} - {model}",
-                                "Vector Store": "✓" if model_manager.vector_store_created else "✗",
-                                "RAG Success": "✗"
+                                "Vector Store": "Success" if model_manager.vector_store_created else "Failed",
+                                "RAG Success": "Failed"
                             })
                             
                             rag_status_table.dataframe(pd.DataFrame(rag_statuses))
@@ -558,66 +549,109 @@ This tool grades essays using multiple AI models and compares outputs.
                     status_text.empty()
                     
                     st.subheader(f"📝 Results for {essay_name}")
-                    display_comparison_table(results)
+                    results_df = display_comparison_table(results)
+                    
+                    # Create download buttons for individual formats
+                    col1, col2, col3, col4 = st.columns(4)
                     
                     # Save original essay content and graded results for download (UTF-8 encoded)
                     try:
+                        # Prepare text download
                         original_and_graded = f"ORIGINAL ESSAY:\n\n{essay_text}\n\n" + "\n\n".join([
                             f"=== GRADED BY {model} ===\n"
-                            f"Vector Store: {'✓' if data['vector_store_created'] else '✗'}, "
-                            f"RAG: {'✓' if data['rag_success'] else '✗'}\n\n"
+                            f"Vector Store: {'Success' if data['vector_store_created'] else 'Failed'}, "
+                            f"RAG: {'Success' if data['rag_success'] else 'Failed'}\n\n"
                             f"{data['content']}" 
                             for model, data in results.items()
                         ])
-                        bytes_data = original_and_graded.encode('utf-8')
+                        text_bytes = original_and_graded.encode('utf-8')
                         
-                        st.download_button(
-                            "📄 Download Text Results",
-                            data=bytes_data,
-                            file_name=f"graded_{essay_name}.txt",
-                            mime="text/plain",
-                            key=f"text_{essay_name}"
-                        )
-                        all_texts.append((essay_name, bytes_data))
+                        with col1:
+                            st.download_button(
+                                "📄 Download Text Results",
+                                data=text_bytes,
+                                file_name=f"graded_{essay_name}.txt",
+                                mime="text/plain",
+                                key=f"text_{essay_name}"
+                            )
+                        all_texts.append((f"graded_{essay_name}.txt", text_bytes))
+                        
+                        # Prepare PDF download
+                        pdf_buffer = save_pdf(essay_name, results)
+                        with col2:
+                            st.download_button(
+                                "📥 Download as PDF", 
+                                data=pdf_buffer, 
+                                file_name=f"graded_{essay_name}.pdf", 
+                                mime="application/pdf",
+                                key=f"pdf_{essay_name}"
+                            )
+                        all_pdfs.append((f"graded_{essay_name}.pdf", pdf_buffer))
+                        
+                        # Prepare CSV download
+                        if results_df is not None:
+                            csv_buffer = io.StringIO()
+                            results_df.to_csv(csv_buffer, index=False)
+                            csv_bytes = csv_buffer.getvalue().encode('utf-8')
+                            with col3:
+                                st.download_button(
+                                    "📊 Download CSV Results",
+                                    data=csv_bytes,
+                                    file_name=f"graded_{essay_name}_results.csv",
+                                    mime="text/csv",
+                                    key=f"csv_{essay_name}"
+                                )
+                            all_csvs.append((f"graded_{essay_name}_results.csv", csv_bytes))
+                        
+                        # Create a zip with all formats for this essay
+                        zip_buffer = io.BytesIO()
+                        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
+                            zipf.writestr(f"graded_{essay_name}.txt", text_bytes)
+                            pdf_buffer.seek(0)
+                            zipf.writestr(f"graded_{essay_name}.pdf", pdf_buffer.read())
+                            if results_df is not None:
+                                zipf.writestr(f"graded_{essay_name}_results.csv", csv_bytes)
+                        
+                        zip_buffer.seek(0)
+                        with col4:
+                            st.download_button(
+                                "🗂️ Download All Formats",
+                                data=zip_buffer,
+                                file_name=f"graded_{essay_name}_all.zip",
+                                mime="application/zip",
+                                key=f"zip_{essay_name}"
+                            )
+                        
                     except Exception as e:
-                        st.error(f"Error creating text download: {e}")
-                    
-                    # Also provide PDF download
-                    try:
-                        pdf = save_pdf(essay_name, results)
-                        all_pdfs.append((essay_name, pdf))
-                        st.download_button(
-                            "📥 Download as PDF", 
-                            data=pdf, 
-                            file_name=f"graded_{essay_name}.pdf", 
-                            mime="application/pdf",
-                            key=f"pdf_{essay_name}"
-                        )
-                    except Exception as e:
-                        st.error(f"Error creating PDF: {e}")
+                        st.error(f"Error creating downloads: {e}")
 
-                if len(all_pdfs) > 1:  # Only create ZIP if multiple essays
+                # Create a single ZIP file with all essays and all formats if multiple essays exist
+                if len(essay_files) > 1:
                     try:
-                        zip_output = io.BytesIO()
-                        with zipfile.ZipFile(zip_output, "w", zipfile.ZIP_DEFLATED) as zipf:
-                            # Add PDFs
-                            for name, pdf in all_pdfs:
-                                pdf.seek(0)  # Ensure we're at the start of the PDF data
-                                zipf.writestr(f"{name}.pdf", pdf.read())
+                        all_essays_zip = io.BytesIO()
+                        with zipfile.ZipFile(all_essays_zip, "w", zipfile.ZIP_DEFLATED) as zipf:
+                            # Add all text files
+                            for name, content in all_texts:
+                                zipf.writestr(name, content)
                                 
-                            # Also add text versions
-                            for name, text_data in all_texts:
-                                zipf.writestr(f"{name}.txt", text_data)
+                            # Add all PDFs
+                            for name, pdf_buffer in all_pdfs:
+                                pdf_buffer.seek(0)
+                                zipf.writestr(name, pdf_buffer.read())
                                 
-                        zip_output.seek(0)
+                            # Add all CSVs
+                            for name, content in all_csvs:
+                                zipf.writestr(name, content)
+                                
+                        all_essays_zip.seek(0)
                         st.download_button(
-                            "📦 Download All as ZIP", 
-                            data=zip_output, 
+                            "📦 Download ALL Essays (All Formats)",
+                            data=all_essays_zip, 
                             file_name="all_graded_essays.zip", 
                             mime="application/zip"
                         )
                     except Exception as e:
-                        st.error(f"Error creating ZIP file: {e}")
+                        st.error(f"Error creating combined ZIP file: {e}")
 
             except Exception as e:
                 st.error(f"❌ Error grading essays: {e}")
