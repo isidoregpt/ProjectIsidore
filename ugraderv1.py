@@ -8,22 +8,59 @@ from fpdf import FPDF
 import pandas as pd
 from openai import OpenAI
 
+# Model provider configurations including parameter support
 MODEL_OPTIONS = {
-    "OpenAI": [
-        "gpt-4.1-2025-04-14", "gpt-4.1-mini-2025-04-14", "gpt-4.1-nano-2025-04-14",
-        "gpt-4.5-preview-2025-02-27", "gpt-4o-2024-08-06", "gpt-4o-mini-2024-07-18",
-        "chatgpt-4o-latest", "o1-2024-12-17", "o3-mini-2025-01-31", "o4-mini-2025-04-16"
-    ],
-    "Cerebras": [
-        "llama-4-scout-17b-16e-instruct", "llama3.1-8b", "llama-3.3-70b"
-    ],
-    "DeepSeek": ["deepseek-reasoner", "deepseek-chat"],
-    "Anthropic": ["claude-3-5-sonnet-20241022", "claude-3-7-sonnet-20250219"],
-    "Gemini": ["gemini-2.0-flash-001", "gemini-2.0-flash-lite-001", "gemini-2.0-flash-lite"],
-    "Grok": [
-        "grok-2-latest", "grok-3-beta", "grok-3-fast-beta",
-        "grok-3-mini-beta", "grok-3-mini-fast-beta"
-    ]
+    "OpenAI": {
+        "models": [
+            "gpt-4.1-2025-04-14", "gpt-4.1-mini-2025-04-14", "gpt-4.1-nano-2025-04-14",
+            "gpt-4.5-preview-2025-02-27", "gpt-4o-2024-08-06", "gpt-4o-mini-2024-07-18",
+            "chatgpt-4o-latest", "o1-2024-12-17", "o3-mini-2025-01-31", "o4-mini-2025-04-16"
+        ],
+        "supports_temperature": True,
+        "supports_top_p": True,
+        "supports_iterations": True,
+        "temp_range": (0.0, 2.0)
+    },
+    "Cerebras": {
+        "models": [
+            "llama-4-scout-17b-16e-instruct", "llama3.1-8b", "llama-3.3-70b"
+        ],
+        "supports_temperature": True,
+        "supports_top_p": True,
+        "supports_iterations": False,
+        "temp_range": (0.0, 1.0)
+    },
+    "DeepSeek": {
+        "models": ["deepseek-reasoner", "deepseek-chat"],
+        "supports_temperature": True,
+        "supports_top_p": True,
+        "supports_iterations": False,
+        "temp_range": (0.0, 1.0)
+    },
+    "Anthropic": {
+        "models": ["claude-3-5-sonnet-20241022", "claude-3-7-sonnet-20250219"],
+        "supports_temperature": True,
+        "supports_top_p": False,
+        "supports_iterations": False,
+        "temp_range": (0.0, 1.0)
+    },
+    "Gemini": {
+        "models": ["gemini-2.0-flash-001", "gemini-2.0-flash-lite-001", "gemini-2.0-flash-lite"],
+        "supports_temperature": True,
+        "supports_top_p": True,
+        "supports_iterations": False,
+        "temp_range": (0.0, 2.0)
+    },
+    "Grok": {
+        "models": [
+            "grok-2-latest", "grok-3-beta", "grok-3-fast-beta",
+            "grok-3-mini-beta", "grok-3-mini-fast-beta"
+        ],
+        "supports_temperature": True,
+        "supports_top_p": True,
+        "supports_iterations": False,
+        "temp_range": (0.0, 1.0)
+    }
 }
 
 API_ENDPOINT = "http://localhost:8000/api/chat"
@@ -105,6 +142,29 @@ def display_comparison_table(results):
         st.table(avg)
 
 
+def apply_model_parameters(selected_models, temperature, top_p, iterations):
+    """Apply appropriate model parameters based on provider compatibility"""
+    for model in selected_models:
+        provider = model["provider"]
+        model_config = MODEL_OPTIONS.get(provider, {})
+        
+        # Add temperature if supported
+        if model_config.get("supports_temperature", False):
+            min_temp, max_temp = model_config.get("temp_range", (0.0, 1.0))
+            # Clamp temperature to model's valid range
+            model["temperature"] = max(min_temp, min(temperature, max_temp))
+        
+        # Add top_p if supported
+        if model_config.get("supports_top_p", False):
+            model["top_p"] = top_p
+        
+        # Add iterations if supported
+        if model_config.get("supports_iterations", False):
+            model["iterations"] = iterations
+    
+    return selected_models
+
+
 def main():
     st.set_page_config(page_title="Multi-Model Essay Grader", layout="wide")
     st.title("🤖 Multi-Model Essay Grader with Retrieval & Comparison")
@@ -150,17 +210,24 @@ This tool grades essays using multiple AI models, compares outputs, and exports 
 
     st.subheader("🤖 Choose Models for Grading")
     selected_models = []
-    for provider, models in MODEL_OPTIONS.items():
+    for provider, provider_config in MODEL_OPTIONS.items():
         with st.expander(f"{provider} Models"):
-            for model in models:
+            for model in provider_config["models"]:
                 if st.checkbox(f"{model}", key=f"{provider}_{model}"):
                     selected_models.append({"provider": provider, "model": model})
 
     st.markdown("---")
     st.subheader("⚙️ Model Behavior Settings")
-    temperature = st.slider("Temperature", 0.0, 1.0, 0.10, 0.1)
-    top_p = st.slider("Top-p Sampling", 0.1, 1.0, 0.9, 0.01)
-    iterations = st.number_input("Iterations", min_value=1, max_value=5, value=1)
+    st.info("Note: Settings will only be applied to models that support them.")
+    
+    temperature = st.slider("Temperature", 0.0, 2.0, 0.7, 0.1, 
+                           help="Controls randomness: Lower values are more deterministic, higher values more creative.")
+    
+    top_p = st.slider("Top-p Sampling", 0.1, 1.0, 0.9, 0.01, 
+                     help="Controls diversity: Lower values consider only the most likely tokens.")
+    
+    iterations = st.number_input("Iterations", min_value=1, max_value=5, value=1, 
+                               help="Number of grading iterations (only supported by select models).")
 
     if st.button("🚀 Grade Essays"):
         if not api_key_file or not prompt_file or not reference_file or not essay_files or not selected_models:
@@ -189,14 +256,20 @@ This tool grades essays using multiple AI models, compares outputs, and exports 
                 for i, essay_text in enumerate(essay_files):
                     essay_name = essay_names[i] if i < len(essay_names) else f"essay_{i+1}.txt"
                     
+                    # Apply appropriate model parameters based on provider compatibility
+                    models_with_params = apply_model_parameters(
+                        selected_models.copy(),  # Use copy to avoid modifying original selection
+                        temperature, 
+                        top_p, 
+                        iterations
+                    )
+                    
                     request_payload = {
                         "message": f"Prompt:\n{prompt}\n\nReference:\n{reference}\n\nRubric:\n{rubric}\n\nEssay:\n{essay_text}",
-                        "models": selected_models,
-                        "vector_store_id": VECTOR_STORE_ID,
-                        "temperature": temperature,
-                        "top_p": top_p,
-                        "iterations": iterations
+                        "models": models_with_params,
+                        "vector_store_id": VECTOR_STORE_ID
                     }
+                    
                     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
                     with st.spinner(f"Grading {essay_name}..."):
