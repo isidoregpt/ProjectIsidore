@@ -165,10 +165,20 @@ class ModelManager:
                 request_params["top_p"] = top_p
             
             response = self.openai_client.chat.completions.create(**request_params)
-            return response.choices[0].message.content, self.vector_store_created, rag_success
+            
+            # Return content along with RAG status flags
+            return {
+                "content": response.choices[0].message.content,
+                "vector_store_created": self.vector_store_created,
+                "rag_success": rag_success
+            }
             
         except Exception as e:
-            return f"Error grading with OpenAI model {model}: {str(e)}", self.vector_store_created, False
+            return {
+                "content": f"Error grading with OpenAI model {model}: {str(e)}",
+                "vector_store_created": self.vector_store_created,
+                "rag_success": False
+            }
     
     def grade_essay_with_anthropic(self, model, prompt, rubric, reference, essay, temperature=0.7):
         """Grade an essay using an Anthropic model"""
@@ -218,10 +228,18 @@ class ModelManager:
             response = requests.post("https://api.anthropic.com/v1/messages", json=data, headers=headers)
             response.raise_for_status()
             
-            return response.json()["content"][0]["text"], self.vector_store_created, rag_success
+            return {
+                "content": response.json()["content"][0]["text"],
+                "vector_store_created": self.vector_store_created,
+                "rag_success": rag_success
+            }
             
         except Exception as e:
-            return f"Error grading with Anthropic model {model}: {str(e)}", self.vector_store_created, False
+            return {
+                "content": f"Error grading with Anthropic model {model}: {str(e)}",
+                "vector_store_created": self.vector_store_created,
+                "rag_success": False
+            }
     
     def grade_essay(self, provider, model, prompt, rubric, reference, essay, temperature=0.7, top_p=0.9):
         """Route the grading request to the appropriate API based on provider"""
@@ -230,7 +248,11 @@ class ModelManager:
         elif provider == "Anthropic":
             return self.grade_essay_with_anthropic(model, prompt, rubric, reference, essay, temperature)
         else:
-            return f"Unsupported provider: {provider}", False, False
+            return {
+                "content": f"Unsupported provider: {provider}",
+                "vector_store_created": False,
+                "rag_success": False
+            }
 
 
 def save_pdf(essay_name, model_outputs):
@@ -252,9 +274,7 @@ def save_pdf(essay_name, model_outputs):
     pdf.cell(200, 10, f"Graded Essay: {safe_name}", ln=True, align="C")
     
     # Process each model's output
-    for model, data in model_outputs.items():
-        text, vector_store_created, rag_success = data
-        
+    for model, output_data in model_outputs.items():
         if not os.path.exists('DejaVuSansCondensed.ttf'):
             pdf.set_font('Arial', 'B', 12)
         else:
@@ -262,8 +282,10 @@ def save_pdf(essay_name, model_outputs):
             
         # Create safe model name with RAG status
         safe_model = ''.join(c if ord(c) < 128 else '?' for c in model)
-        rag_status = f"[Vector Store: {'✓' if vector_store_created else '✗'}, RAG: {'✓' if rag_success else '✗'}]"
-        pdf.cell(200, 10, f"Model: {safe_model} {rag_status}", ln=True)
+        rag_status = (f"Vector Store: {'✓' if output_data['vector_store_created'] else '✗'}, "
+                      f"RAG: {'✓' if output_data['rag_success'] else '✗'}")
+        pdf.cell(200, 10, f"Model: {safe_model}", ln=True)
+        pdf.cell(200, 10, f"RAG Status: {rag_status}", ln=True)
         
         if not os.path.exists('DejaVuSansCondensed.ttf'):
             pdf.set_font('Arial', size=10)
@@ -271,7 +293,7 @@ def save_pdf(essay_name, model_outputs):
             pdf.set_font('DejaVu', '', 10)
             
         # Process text line by line with encoding safety
-        for line in text.split("\n"):
+        for line in output_data["content"].split("\n"):
             # Replace problematic characters
             safe_line = ''.join(c if ord(c) < 128 else '?' for c in line)
             pdf.multi_cell(0, 5, safe_line)
@@ -287,7 +309,13 @@ def save_pdf(essay_name, model_outputs):
         # If PDF generation fails, return a simple text buffer instead
         st.warning(f"PDF generation failed: {e}. Using text format instead.")
         text_buffer = io.BytesIO()
-        text_content = "\n\n".join([f"Model: {model}\nVector Store: {'✓' if data[1] else '✗'}, RAG: {'✓' if data[2] else '✗'}\n\n{data[0]}" for model, data in model_outputs.items()])
+        text_content = "\n\n".join([
+            f"Model: {model}\n"
+            f"Vector Store: {'✓' if data['vector_store_created'] else '✗'}, "
+            f"RAG: {'✓' if data['rag_success'] else '✗'}\n\n"
+            f"{data['content']}" 
+            for model, data in model_outputs.items()
+        ])
         text_buffer.write(text_content.encode('utf-8'))
         text_buffer.seek(0)
         return text_buffer
@@ -297,21 +325,30 @@ def display_comparison_table(results):
     try:
         total_scores = []
         rows = []
-        for model, data in results.items():
-            content, vector_store_created, rag_success = data
+        
+        for model, output_data in results.items():
+            content = output_data["content"]
+            vector_store_created = output_data["vector_store_created"]
+            rag_success = output_data["rag_success"]
+            
+            # Extract points deducted and summary
             lines = content.splitlines()
             deduction_line = next((line for line in lines if "points deducted" in line.lower()), "Not Found")
             summary = next((line for line in lines[::-1] if line.strip()), "")
+            
             try:
                 # Extract numerical value safely
                 digits = ''.join(c for c in deduction_line if c.isdigit() or c == '.')
                 points = float(digits) if digits else 0
             except:
                 points = 0
+                
             total_scores.append((model, points))
             
             # Add RAG status to the table
-            rag_status = f"Vector Store: {'✓' if vector_store_created else '✗'}, RAG: {'✓' if rag_success else '✗'}"
+            rag_status = (f"Vector Store: {'✓' if vector_store_created else '✗'}, "
+                          f"RAG: {'✓' if rag_success else '✗'}")
+            
             rows.append({
                 "Model": model, 
                 "RAG Status": rag_status,
@@ -319,6 +356,7 @@ def display_comparison_table(results):
                 "Summary": summary[:150]
             })
             
+        # Create and display the dataframe
         df = pd.DataFrame(rows)
         st.dataframe(df, use_container_width=True)
 
@@ -441,7 +479,15 @@ This tool grades essays using multiple AI models and compares outputs.
                     results = {}
                     progress_bar = st.progress(0)
                     status_text = st.empty()
+                    
+                    # Create a persistent container for RAG status that will remain
+                    # even after all models have finished processing
                     rag_status_container = st.container()
+                    with rag_status_container:
+                        st.subheader("🔍 RAG Status Tracking")
+                        rag_status_table = st.empty()
+                    
+                    # Track RAG status for all models
                     rag_statuses = []
                     
                     for idx, model_info in enumerate(selected_models):
@@ -463,7 +509,7 @@ This tool grades essays using multiple AI models and compares outputs.
                         
                         # Grade essay with the selected model
                         try:
-                            graded_content, vector_store_created, rag_success = model_manager.grade_essay(
+                            result = model_manager.grade_essay(
                                 provider, 
                                 model, 
                                 prompt, 
@@ -475,21 +521,32 @@ This tool grades essays using multiple AI models and compares outputs.
                             )
                             
                             # Store results with RAG status flags
-                            results[f"{provider} - {model}"] = (graded_content, vector_store_created, rag_success)
+                            results[f"{provider} - {model}"] = result
                             
                             # Update RAG status for this model
-                            rag_status = f"{provider} - {model}: Vector Store: {'✓' if vector_store_created else '✗'}, RAG: {'✓' if rag_success else '✗'}"
-                            rag_statuses.append(rag_status)
+                            rag_statuses.append({
+                                "Model": f"{provider} - {model}",
+                                "Vector Store": "✓" if result["vector_store_created"] else "✗",
+                                "RAG Success": "✓" if result["rag_success"] else "✗"
+                            })
                             
-                            # Update the RAG status container as we go
-                            with rag_status_container:
-                                st.write("### RAG Status:")
-                                for status in rag_statuses:
-                                    st.write(status)
+                            # Update the RAG status table as we go
+                            rag_status_table.dataframe(pd.DataFrame(rag_statuses))
                                 
                         except Exception as e:
-                            results[f"{provider} - {model}"] = (f"Error grading: {str(e)}", vector_store_created, False)
-                            rag_statuses.append(f"{provider} - {model}: Error - Vector Store: {'✓' if vector_store_created else '✗'}, RAG: ✗")
+                            results[f"{provider} - {model}"] = {
+                                "content": f"Error grading: {str(e)}",
+                                "vector_store_created": model_manager.vector_store_created,
+                                "rag_success": False
+                            }
+                            
+                            rag_statuses.append({
+                                "Model": f"{provider} - {model}",
+                                "Vector Store": "✓" if model_manager.vector_store_created else "✗",
+                                "RAG Success": "✗"
+                            })
+                            
+                            rag_status_table.dataframe(pd.DataFrame(rag_statuses))
                             st.error(f"Error grading with {provider} {model}: {e}")
                         
                         progress_bar.progress((idx + 1) / len(selected_models))
@@ -503,17 +560,13 @@ This tool grades essays using multiple AI models and compares outputs.
                     st.subheader(f"📝 Results for {essay_name}")
                     display_comparison_table(results)
                     
-                    # Keep the RAG status display
-                    with rag_status_container:
-                        st.write("### Final RAG Status:")
-                        for status in rag_statuses:
-                            st.write(status)
-                    
                     # Save original essay content and graded results for download (UTF-8 encoded)
                     try:
                         original_and_graded = f"ORIGINAL ESSAY:\n\n{essay_text}\n\n" + "\n\n".join([
                             f"=== GRADED BY {model} ===\n"
-                            f"Vector Store: {'✓' if data[1] else '✗'}, RAG: {'✓' if data[2] else '✗'}\n\n{data[0]}" 
+                            f"Vector Store: {'✓' if data['vector_store_created'] else '✗'}, "
+                            f"RAG: {'✓' if data['rag_success'] else '✗'}\n\n"
+                            f"{data['content']}" 
                             for model, data in results.items()
                         ])
                         bytes_data = original_and_graded.encode('utf-8')
