@@ -31,12 +31,6 @@ MODEL_OPTIONS = {
     # Other providers can be added here as needed
 }
 
-SAVED_RUBRICS = {
-    "6 Traits": "rubrics/6_traits.txt",
-    "SAT Rubric": "rubrics/sat_rubric.txt",
-    "AP Lang Rubric": "rubrics/ap_lang.txt"
-}
-
 class ModelManager:
     def __init__(self, api_key):
         self.api_key = api_key
@@ -224,11 +218,11 @@ def main():
     with st.expander("ℹ️ Instructions"):
         st.markdown("""
 This tool grades essays using multiple AI models and compares outputs.
-1. Upload your Prompt, Rubric, Reference, and Essays
-2. Select saved or custom rubric
-3. Choose models and settings
+1. Upload your API Key, Prompt, Rubric, Reference, and Essays
+2. Choose models and adjust temperature settings
+3. Click "Grade Essays" to begin the process
 4. Vector store context will improve grading consistency
-5. Export results as PDF or ZIP
+5. Export results as Text, PDF, or ZIP
 """)
 
     col1, col2, col3, col4 = st.columns(4)
@@ -237,8 +231,7 @@ This tool grades essays using multiple AI models and compares outputs.
     with col2:
         prompt_file = st.file_uploader("📝 Prompt (TXT)", type=["txt"])
     with col3:
-        use_saved_rubric = st.selectbox("📋 Choose Saved Rubric", ["None"] + list(SAVED_RUBRICS.keys()))
-        rubric_file = st.file_uploader("📤 Or Upload Custom Rubric (TXT)", type=["txt"])
+        rubric_file = st.file_uploader("📋 Rubric (TXT)", type=["txt"])
     with col4:
         reference_file = st.file_uploader("📘 Reference Material (TXT)", type=["txt"])
 
@@ -279,26 +272,14 @@ This tool grades essays using multiple AI models and compares outputs.
                      help="Controls diversity: Lower values consider only the most likely tokens.")
 
     if st.button("🚀 Grade Essays"):
-        if not api_key_file or not prompt_file or not reference_file or not essay_files or not selected_models:
+        if not api_key_file or not prompt_file or not rubric_file or not reference_file or not essay_files or not selected_models:
             st.error("Please upload all required files and select at least one model.")
         else:
             try:
                 api_key = api_key_file.read().decode("utf-8").strip()
                 prompt = prompt_file.read().decode("utf-8")
+                rubric = rubric_file.read().decode("utf-8")
                 reference = reference_file.read().decode("utf-8")
-
-                if use_saved_rubric != "None":
-                    try:
-                        with open(SAVED_RUBRICS[use_saved_rubric], "r", encoding="utf-8") as f:
-                            rubric = f.read()
-                    except FileNotFoundError:
-                        st.error(f"Could not find the saved rubric file at {SAVED_RUBRICS[use_saved_rubric]}. Please upload a custom rubric instead.")
-                        return
-                elif rubric_file:
-                    rubric = rubric_file.read().decode("utf-8")
-                else:
-                    st.error("Please select or upload a rubric.")
-                    return
                 
                 # Initialize the model manager with the API key
                 model_manager = ModelManager(api_key)
