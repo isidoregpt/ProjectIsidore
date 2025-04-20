@@ -2,11 +2,13 @@ import streamlit as st
 import datetime
 import io
 import zipfile
-import requests
 import os
 from fpdf import FPDF
 import pandas as pd
 from openai import OpenAI
+import requests
+import json
+import time
 
 # Model provider configurations including parameter support
 MODEL_OPTIONS = {
@@ -18,83 +20,103 @@ MODEL_OPTIONS = {
         ],
         "supports_temperature": True,
         "supports_top_p": True,
-        "supports_iterations": True,
         "temp_range": (0.0, 2.0)
-    },
-    "Cerebras": {
-        "models": [
-            "llama-4-scout-17b-16e-instruct", "llama3.1-8b", "llama-3.3-70b"
-        ],
-        "supports_temperature": True,
-        "supports_top_p": True,
-        "supports_iterations": False,
-        "temp_range": (0.0, 1.0)
-    },
-    "DeepSeek": {
-        "models": ["deepseek-reasoner", "deepseek-chat"],
-        "supports_temperature": True,
-        "supports_top_p": True,
-        "supports_iterations": False,
-        "temp_range": (0.0, 1.0)
     },
     "Anthropic": {
         "models": ["claude-3-5-sonnet-20241022", "claude-3-7-sonnet-20250219"],
         "supports_temperature": True,
         "supports_top_p": False,
-        "supports_iterations": False,
-        "temp_range": (0.0, 1.0)
-    },
-    "Gemini": {
-        "models": ["gemini-2.0-flash-001", "gemini-2.0-flash-lite-001", "gemini-2.0-flash-lite"],
-        "supports_temperature": True,
-        "supports_top_p": True,
-        "supports_iterations": False,
-        "temp_range": (0.0, 2.0)
-    },
-    "Grok": {
-        "models": [
-            "grok-2-latest", "grok-3-beta", "grok-3-fast-beta",
-            "grok-3-mini-beta", "grok-3-mini-fast-beta"
-        ],
-        "supports_temperature": True,
-        "supports_top_p": True,
-        "supports_iterations": False,
         "temp_range": (0.0, 1.0)
     }
+    # Other providers can be added here as needed
 }
 
-API_ENDPOINT = "http://localhost:8000/api/chat"
 SAVED_RUBRICS = {
     "6 Traits": "rubrics/6_traits.txt",
     "SAT Rubric": "rubrics/sat_rubric.txt",
     "AP Lang Rubric": "rubrics/ap_lang.txt"
 }
 
-VECTOR_STORE_ID = None
-
-
-def create_vector_store(api_key, prompt, rubric, reference):
-    global VECTOR_STORE_ID
-    if VECTOR_STORE_ID is None:
+class ModelManager:
+    def __init__(self, api_key):
+        self.api_key = api_key
+        self.openai_client = OpenAI(api_key=api_key)
+        
+    def grade_essay_with_openai(self, model, prompt, rubric, reference, essay, temperature=0.7, top_p=0.9):
+        """Grade an essay using an OpenAI model"""
         try:
-            client = OpenAI(api_key=api_key)
-            vs = client.vector_stores.create(name="Essay Grading Context")
-            VECTOR_STORE_ID = vs.id
-
-            for name, content in {
-                "prompt.txt": prompt,
-                "rubric.txt": rubric,
-                "reference.txt": reference
-            }.items():
-                with open(name, "w", encoding="utf-8") as f:
-                    f.write(content)
-                with open(name, "rb") as f:
-                    client.vector_stores.files.upload_and_poll(vector_store_id=vs.id, file=f)
-            return True
+            grading_request = (
+                f"Prompt:\n{prompt}\n\n"
+                f"Reference Material:\n{reference}\n\n"
+                f"Rubric:\n{rubric}\n\n"
+                f"Essay to grade:\n{essay}\n\n"
+                "Grade this essay according to the rubric and reference material provided. "
+                "Be specific about points deducted and explain why. "
+                "First provide a detailed analysis, then summarize with total points deducted at the end."
+            )
+            
+            response = self.openai_client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": "You are an expert essay grader who provides detailed feedback."},
+                    {"role": "user", "content": grading_request}
+                ],
+                temperature=temperature,
+                top_p=top_p
+            )
+            
+            return response.choices[0].message.content
+            
         except Exception as e:
-            st.error(f"Error creating vector store: {e}")
-            return False
-    return True
+            return f"Error grading with OpenAI model {model}: {str(e)}"
+    
+    def grade_essay_with_anthropic(self, model, prompt, rubric, reference, essay, temperature=0.7):
+        """Grade an essay using an Anthropic model"""
+        try:
+            # Anthropic API endpoint
+            url = "https://api.anthropic.com/v1/messages"
+            
+            grading_request = (
+                f"Prompt:\n{prompt}\n\n"
+                f"Reference Material:\n{reference}\n\n"
+                f"Rubric:\n{rubric}\n\n"
+                f"Essay to grade:\n{essay}\n\n"
+                "Grade this essay according to the rubric and reference material provided. "
+                "Be specific about points deducted and explain why. "
+                "First provide a detailed analysis, then summarize with total points deducted at the end."
+            )
+            
+            headers = {
+                "Content-Type": "application/json",
+                "x-api-key": self.api_key,
+                "anthropic-version": "2023-06-01"
+            }
+            
+            data = {
+                "model": model,
+                "messages": [
+                    {"role": "user", "content": grading_request}
+                ],
+                "temperature": temperature,
+                "max_tokens": 4000
+            }
+            
+            response = requests.post(url, json=data, headers=headers)
+            response.raise_for_status()
+            
+            return response.json()["content"][0]["text"]
+            
+        except Exception as e:
+            return f"Error grading with Anthropic model {model}: {str(e)}"
+    
+    def grade_essay(self, provider, model, prompt, rubric, reference, essay, temperature=0.7, top_p=0.9):
+        """Route the grading request to the appropriate API based on provider"""
+        if provider == "OpenAI":
+            return self.grade_essay_with_openai(model, prompt, rubric, reference, essay, temperature, top_p)
+        elif provider == "Anthropic":
+            return self.grade_essay_with_anthropic(model, prompt, rubric, reference, essay, temperature)
+        else:
+            return f"Unsupported provider: {provider}"
 
 
 def save_pdf(essay_name, model_outputs):
@@ -142,53 +164,28 @@ def display_comparison_table(results):
         st.table(avg)
 
 
-def apply_model_parameters(selected_models, temperature, top_p, iterations):
-    """Apply appropriate model parameters based on provider compatibility"""
-    for model in selected_models:
-        provider = model["provider"]
-        model_config = MODEL_OPTIONS.get(provider, {})
-        
-        # Add temperature if supported
-        if model_config.get("supports_temperature", False):
-            min_temp, max_temp = model_config.get("temp_range", (0.0, 1.0))
-            # Clamp temperature to model's valid range
-            model["temperature"] = max(min_temp, min(temperature, max_temp))
-        
-        # Add top_p if supported
-        if model_config.get("supports_top_p", False):
-            model["top_p"] = top_p
-        
-        # Add iterations if supported
-        if model_config.get("supports_iterations", False):
-            model["iterations"] = iterations
-    
-    return selected_models
-
-
 def main():
     st.set_page_config(page_title="Multi-Model Essay Grader", layout="wide")
-    st.title("🤖 Multi-Model Essay Grader with Retrieval & Comparison")
+    st.title("🤖 Multi-Model Essay Grader with Comparison")
 
     with st.expander("ℹ️ Instructions"):
         st.markdown("""
-This tool grades essays using multiple AI models, compares outputs, and exports results.
+This tool grades essays using multiple AI models and compares outputs.
 1. Upload your Prompt, Rubric, Reference, and Essays
 2. Select saved or custom rubric
 3. Choose models and settings
-4. Vector store context will improve consistency
-5. Export results as PDF or ZIP
+4. Export results as PDF or ZIP
 """)
 
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         api_key_file = st.file_uploader("🔑 API Key (TXT)", type=["txt"])
     with col2:
         prompt_file = st.file_uploader("📝 Prompt (TXT)", type=["txt"])
     with col3:
         use_saved_rubric = st.selectbox("📋 Choose Saved Rubric", ["None"] + list(SAVED_RUBRICS.keys()))
-    with col4:
         rubric_file = st.file_uploader("📤 Or Upload Custom Rubric (TXT)", type=["txt"])
-    with col5:
+    with col4:
         reference_file = st.file_uploader("📘 Reference Material (TXT)", type=["txt"])
 
     st.markdown("---")
@@ -208,6 +205,7 @@ This tool grades essays using multiple AI models, compares outputs, and exports 
             essay_names = [f.name for f in uploaded_files]
             essay_files = [f.read().decode("utf-8") for f in uploaded_files]
 
+    st.markdown("---")
     st.subheader("🤖 Choose Models for Grading")
     selected_models = []
     for provider, provider_config in MODEL_OPTIONS.items():
@@ -220,14 +218,11 @@ This tool grades essays using multiple AI models, compares outputs, and exports 
     st.subheader("⚙️ Model Behavior Settings")
     st.info("Note: Settings will only be applied to models that support them.")
     
-    temperature = st.slider("Temperature", 0.0, 2.0, 0.7, 0.1, 
+    temperature = st.slider("Temperature", 0.0, 1.0, 0.7, 0.1, 
                            help="Controls randomness: Lower values are more deterministic, higher values more creative.")
     
     top_p = st.slider("Top-p Sampling", 0.1, 1.0, 0.9, 0.01, 
                      help="Controls diversity: Lower values consider only the most likely tokens.")
-    
-    iterations = st.number_input("Iterations", min_value=1, max_value=5, value=1, 
-                               help="Number of grading iterations (only supported by select models).")
 
     if st.button("🚀 Grade Essays"):
         if not api_key_file or not prompt_file or not reference_file or not essay_files or not selected_models:
@@ -239,44 +234,66 @@ This tool grades essays using multiple AI models, compares outputs, and exports 
                 reference = reference_file.read().decode("utf-8")
 
                 if use_saved_rubric != "None":
-                    with open(SAVED_RUBRICS[use_saved_rubric], "r", encoding="utf-8") as f:
-                        rubric = f.read()
+                    try:
+                        with open(SAVED_RUBRICS[use_saved_rubric], "r", encoding="utf-8") as f:
+                            rubric = f.read()
+                    except FileNotFoundError:
+                        st.error(f"Could not find the saved rubric file at {SAVED_RUBRICS[use_saved_rubric]}. Please upload a custom rubric instead.")
+                        return
                 elif rubric_file:
                     rubric = rubric_file.read().decode("utf-8")
                 else:
                     st.error("Please select or upload a rubric.")
                     return
-
-                # Create vector store context
-                if not create_vector_store(api_key, prompt, rubric, reference):
-                    return
-                    
+                
+                model_manager = ModelManager(api_key)
                 all_pdfs = []
 
                 for i, essay_text in enumerate(essay_files):
                     essay_name = essay_names[i] if i < len(essay_names) else f"essay_{i+1}.txt"
                     
-                    # Apply appropriate model parameters based on provider compatibility
-                    models_with_params = apply_model_parameters(
-                        selected_models.copy(),  # Use copy to avoid modifying original selection
-                        temperature, 
-                        top_p, 
-                        iterations
-                    )
+                    results = {}
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
                     
-                    request_payload = {
-                        "message": f"Prompt:\n{prompt}\n\nReference:\n{reference}\n\nRubric:\n{rubric}\n\nEssay:\n{essay_text}",
-                        "models": models_with_params,
-                        "vector_store_id": VECTOR_STORE_ID
-                    }
+                    for idx, model_info in enumerate(selected_models):
+                        provider = model_info["provider"]
+                        model = model_info["model"]
+                        
+                        status_text.text(f"Grading {essay_name} with {provider} {model}...")
+                        
+                        # Apply provider-specific settings
+                        provider_config = MODEL_OPTIONS.get(provider, {})
+                        model_temp = temperature
+                        if provider_config.get("supports_temperature", False):
+                            min_temp, max_temp = provider_config.get("temp_range", (0.0, 1.0))
+                            model_temp = max(min_temp, min(temperature, max_temp))
+                        
+                        model_top_p = top_p
+                        if not provider_config.get("supports_top_p", True):
+                            model_top_p = None
+                        
+                        # Grade essay with the selected model
+                        graded_content = model_manager.grade_essay(
+                            provider, 
+                            model, 
+                            prompt, 
+                            rubric, 
+                            reference, 
+                            essay_text,
+                            temperature=model_temp,
+                            top_p=model_top_p if model_top_p is not None else 0.9
+                        )
+                        
+                        results[f"{provider} - {model}"] = graded_content
+                        progress_bar.progress((idx + 1) / len(selected_models))
+                        
+                        # Add a small delay to avoid rate limits
+                        time.sleep(0.5)
                     
-                    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-
-                    with st.spinner(f"Grading {essay_name}..."):
-                        response = requests.post(API_ENDPOINT, json=request_payload, headers=headers)
-                        response.raise_for_status()
-                        results = response.json().get("results", {})
-
+                    progress_bar.empty()
+                    status_text.empty()
+                    
                     st.subheader(f"📝 Results for {essay_name}")
                     display_comparison_table(results)
                     pdf = save_pdf(essay_name, results)
