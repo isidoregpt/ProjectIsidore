@@ -501,7 +501,7 @@ When using this tool, users must comply with applicable privacy laws such as FER
     st.subheader("⚙️ Model Behavior Settings")
     st.info("Note: Settings will only be applied to models that support them.")
     
-    temperature = st.slider("Temperature", 0.0, 1.0, 0.7, 0.1, 
+    temperature = st.slider("Temperature", 0.0, 1.0, 0.1, 0.1, 
                            help="Controls randomness: Lower values are more deterministic, higher values more creative.")
     
     top_p = st.slider("Top-p Sampling", 0.1, 1.0, 0.9, 0.01, 
