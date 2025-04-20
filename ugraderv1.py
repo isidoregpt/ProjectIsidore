@@ -55,16 +55,25 @@ class ModelManager:
                 "First provide a detailed analysis, then summarize with total points deducted at the end."
             )
             
-            response = self.openai_client.chat.completions.create(
-                model=model,
-                messages=[
+            # Base request parameters
+            request_params = {
+                "model": model,
+                "messages": [
                     {"role": "system", "content": "You are an expert essay grader who provides detailed feedback."},
                     {"role": "user", "content": grading_request}
-                ],
-                temperature=temperature,
-                top_p=top_p
-            )
+                ]
+            }
             
+            # Handle special cases for different model types
+            if "o1" in model or "o3-mini" in model or "o4-mini" in model:
+                # These models don't support temperature or might have restrictions
+                pass
+            else:
+                # Add temperature and top_p for models that support them
+                request_params["temperature"] = temperature
+                request_params["top_p"] = top_p
+            
+            response = self.openai_client.chat.completions.create(**request_params)
             return response.choices[0].message.content
             
         except Exception as e:
@@ -296,9 +305,27 @@ This tool grades essays using multiple AI models and compares outputs.
                     
                     st.subheader(f"📝 Results for {essay_name}")
                     display_comparison_table(results)
+                    
+                    # Save original essay content and graded results for download
+                    original_and_graded = f"ORIGINAL ESSAY:\n\n{essay_text}\n\n" + "\n\n".join([f"=== GRADED BY {model} ===\n\n{content}" for model, content in results.items()])
+                    st.download_button(
+                        "📄 Download Text Results",
+                        data=original_and_graded,
+                        file_name=f"graded_{essay_name}.txt",
+                        mime="text/plain",
+                        key=f"text_{essay_name}"
+                    )
+                    
+                    # Also provide PDF download
                     pdf = save_pdf(essay_name, results)
                     all_pdfs.append((essay_name, pdf))
-                    st.download_button("📥 Download as PDF", data=pdf, file_name=f"graded_{essay_name}.pdf", mime="application/pdf")
+                    st.download_button(
+                        "📥 Download as PDF", 
+                        data=pdf, 
+                        file_name=f"graded_{essay_name}.pdf", 
+                        mime="application/pdf",
+                        key=f"pdf_{essay_name}"
+                    )
 
                 if len(all_pdfs) > 1:  # Only create ZIP if multiple essays
                     zip_output = io.BytesIO()
