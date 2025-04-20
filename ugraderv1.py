@@ -396,7 +396,7 @@ def main():
     st.title("🤖 Multi-Model Essay Grader with Vector Search")
 
     # Instructions Expander
-    with st.expander("ℹ️ Instructions"):
+    with st.expander("💡 Instructions"):
         st.markdown("""
 This tool grades essays using multiple AI models and compares outputs.
 1. Upload your API Key, Prompt, Rubric, Reference, and Essays
@@ -408,7 +408,7 @@ This tool grades essays using multiple AI models and compares outputs.
 """)
 
     # About Expander
-    with st.expander("About"):
+    with st.expander("📚 About"):
         st.markdown(
             """
 **Multi-Model Essay Grader with Retrieval-Augmented Generation**
