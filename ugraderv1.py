@@ -29,7 +29,6 @@ from openai import OpenAI
 import requests
 import json
 import time
-import re
 
 # Model provider configurations including parameter support
 MODEL_OPTIONS = {
@@ -275,18 +274,6 @@ class ModelManager:
             }
 
 
-def clean_text_for_output(text):
-    """Clean text by replacing problematic Unicode characters with ASCII equivalents"""
-    # Replace various dash characters with simple hyphen
-    text = text.replace('—', '-').replace('–', '-').replace('―', '-').replace('‐', '-')
-    # Replace other potentially problematic characters
-    text = text.replace('…', '...').replace('•', '*').replace('№', 'No.')
-    text = text.replace('"', '"').replace('"', '"').replace(''', "'").replace(''', "'")
-    # Remove any remaining non-ASCII characters
-    text = ''.join(c if ord(c) < 128 else '?' for c in text)
-    return text
-
-
 def save_pdf(essay_name, model_outputs):
     """Generate a PDF with grading results and RAG status"""
     try:
@@ -323,9 +310,10 @@ def save_pdf(essay_name, model_outputs):
             pdf.set_font('Arial', '', 10)
                 
             # Process text line by line with encoding safety
-            content = clean_text_for_output(output_data["content"])
-            for line in content.split("\n"):
-                pdf.multi_cell(0, 5, line)
+            for line in output_data["content"].split("\n"):
+                # Replace problematic characters
+                safe_line = ''.join(c if ord(c) < 128 else '?' for c in line)
+                pdf.multi_cell(0, 5, safe_line)
             pdf.ln()
 
         # Output to temporary file
@@ -366,17 +354,10 @@ def display_comparison_table(results):
             deduction_line = next((line for line in lines if "points deducted" in line.lower()), "Not Found")
             summary = next((line for line in lines[::-1] if line.strip()), "")
             
-            # Clean the deduction line by replacing Unicode characters with ASCII equivalents
-            deduction_line = clean_text_for_output(deduction_line)
-            summary = clean_text_for_output(summary)
-            
             try:
-                # Extract numerical value safely using regex to allow for negative numbers
-                match = re.search(r'[-+]?\d*\.?\d+', deduction_line)
-                if match:
-                    points = float(match.group())
-                else:
-                    points = 0
+                # Extract numerical value safely
+                digits = ''.join(c for c in deduction_line if c.isdigit() or c == '.')
+                points = float(digits) if digits else 0
             except:
                 points = 0
                 
@@ -415,7 +396,7 @@ def main():
     st.title("🤖 Multi-Model Essay Grader with Vector Search")
 
     # Instructions Expander
-    with st.expander("💡 Instructions"):
+    with st.expander("ℹ️ Instructions"):
         st.markdown("""
 This tool grades essays using multiple AI models and compares outputs.
 1. Upload your API Key, Prompt, Rubric, Reference, and Essays
@@ -427,7 +408,7 @@ This tool grades essays using multiple AI models and compares outputs.
 """)
 
     # About Expander
-    with st.expander("📚 About"):
+    with st.expander("About"):
         st.markdown(
             """
 **Multi-Model Essay Grader with Retrieval-Augmented Generation**
@@ -653,7 +634,7 @@ When using this tool, users must comply with applicable privacy laws such as FER
                         f"=== GRADED BY {model} ===\n"
                         f"Vector Store: {'Success' if data['vector_store_created'] else 'Failed'}, "
                         f"RAG: {'Success' if data['rag_success'] else 'Failed'}\n\n"
-                        f"{clean_text_for_output(data['content'])}" 
+                        f"{data['content']}" 
                         for model, data in results.items()
                     ])
                     essay_files_data["txt"] = text_content.encode('utf-8')
@@ -666,8 +647,8 @@ When using this tool, users must comply with applicable privacy laws such as FER
                     # 3. Generate CSV file if dataframe is available
                     if results_df is not None:
                         csv_buffer = io.StringIO()
-                        results_df.to_csv(csv_buffer, index=False, encoding='utf-8-sig')  # Use UTF-8 with BOM for Excel compatibility
-                        essay_files_data["csv"] = csv_buffer.getvalue().encode('utf-8-sig')
+                        results_df.to_csv(csv_buffer, index=False)
+                        essay_files_data["csv"] = csv_buffer.getvalue().encode('utf-8')
                     
                     # Store the data for this essay
                     all_essay_data.append((essay_name, essay_files_data))
@@ -682,9 +663,6 @@ When using this tool, users must comply with applicable privacy laws such as FER
                             zipf.writestr(f"graded_{essay_name}_results.csv", essay_files_data["csv"])
                     
                     essay_zip_buffer.seek(0)
-                    st.download_button(
-                        "📦 Download All Formats",
-                        data=essay_zip_buffer,
                     st.download_button(
                         "📦 Download All Formats",
                         data=essay_zip_buffer,
