@@ -1,3 +1,7 @@
 openai
 streamlit
 fpdf
+python-pptx
+openpyxl
+PyMuPDF
+Pillow
