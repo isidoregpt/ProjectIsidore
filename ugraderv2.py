@@ -717,27 +717,59 @@ def main():
         st.markdown("""
 **Goal:** Grade essays using multiple AI models (OpenAI, Anthropic, Google Gemini) and compare outputs, potentially enhancing consistency with Retrieval-Augmented Generation (RAG) using OpenAI's Vector Store.
 
-**Setup:**
-1.  **Install Libraries:** Make sure you have the necessary libraries installed:
+**Prerequisites & Initial Run:**
+
+1.  **Save the Code:** Save this Python script to your computer (e.g., as `grader_app.py`).
+2.  **Install Libraries:** Open your terminal or command prompt. Navigate to the directory where you saved the script. It's highly recommended to use a Python virtual environment. Install the necessary libraries by running:
     ```bash
     pip install streamlit openai requests fpdf pandas google-generativeai
     ```
-2.  **API Key:** Upload a single TXT file containing your API key.
-    * **Important:** This tool currently uses the *same* uploaded key for *all* selected providers (OpenAI, Anthropic, Google). Ensure the key is valid for the services you choose, or use only providers compatible with that key type.
-3.  **Context Files:** Upload TXT files for the Prompt, Rubric, and Reference Material. These are used for grading and building the OpenAI Vector Store for RAG. Ensure these files are not empty.
-4.  **Essays:** Upload student essays as individual TXT files or a single ZIP file containing TXT files. **Ensure essays are anonymized.** Files must be UTF-8 encoded.
-5.  **Models:** Choose the AI models you want to use for grading. Note that Preview models (e.g., Gemini 2.5 Preview) might have different availability or rate limits.
-6.  **Settings:** Adjust Temperature (randomness) and Top-P (token selection diversity). Settings apply only where supported by the model.
-7.  **Grade:** Click "Grade Essays".
+3.  **Run the App:** Start the Streamlit application from your terminal using:
+    ```bash
+    streamlit run grader_app.py
+    ```
+    *(Replace `grader_app.py` with the actual name you saved the script as)*. The application should open in your web browser.
 
-**Process:**
-* The tool attempts to create an OpenAI Vector Store with your context files.
+**Using the App Interface (Step-by-Step):**
+
+*(Once the app is running in your browser)*
+
+1.  **Upload API Key:** Locate the first file uploader labeled **`🔑 API Key (TXT)`**. Click "Browse files" (or drag and drop) to upload the TXT file containing your API key.
+    * **Important:** This tool currently uses the *same* uploaded key for *all* selected providers (OpenAI, Anthropic, Google). Ensure the key is valid for the services you choose.
+2.  **Upload Prompt:** Use the uploader labeled **`📝 Prompt (TXT)`** to upload your essay prompt file.
+3.  **Upload Rubric:** Use the uploader labeled **`📋 Rubric (TXT)`** to upload your grading rubric file.
+4.  **Upload Reference Material:** Use the uploader labeled **`📘 Reference (TXT)`** to upload any reference material file. *(Ensure context files are not empty and use UTF-8 encoding).*
+5.  **Upload Essays:**
+    * Go to the section **`📂 Upload Essays`**.
+    * **Option A (ZIP):** Use the uploader **`📦 Upload ZIP of Essays (TXT files, UTF-8)`** to upload a single ZIP file containing all your anonymized TXT essay files.
+    * **Option B (Individual Files):** If not using a ZIP, use the uploader **`📂 Or Upload one or more Essay Files (TXT, UTF-8)`** to select and upload multiple individual anonymized TXT essay files.
+    * *(Ensure essays are anonymized and UTF-8 encoded).*
+    * *Check the info message below the uploaders to confirm essays loaded.*
+6.  **Select Models:**
+    * Scroll down to the section **`🤖 Choose Models for Grading`**.
+    * Click on the expander arrows (e.g., `OpenAI Models`, `Google Models`) to see the available models.
+    * Check the boxes next to the specific models you want to use. *(Note: Preview models might have different availability or limits).*
+7.  **Adjust Settings (Optional):**
+    * Go to the section **`⚙️ Model Behavior Settings`**.
+    * Adjust the **`Temperature`** and **`Top-p Sampling`** sliders if needed. *(These only affect models that support them).*
+8.  **Start Grading:** Click the large button labeled **`🚀 Grade Essays`**.
+9.  **Wait for Processing:** Monitor the progress bars and status text as the app processes each essay and model. This can take some time, especially with many essays or models.
+10. **Review Results:** As processing completes for each essay, results will appear below. Review the:
+    * **`RAG Status`** table (shows Vector Store/Context Retrieval status per model for *that* essay).
+    * **`Comparison Table`** (summarizes feedback, points deducted, etc.).
+    * **`Average Points Deducted`** table (if scores were parsed).
+11. **Download Outputs:**
+    * Use the **`📥 Download Results for '[essay_name]' (ZIP)`** button below each essay's results section for individual downloads (TXT, PDF, CSV combined).
+    * After *all* essays are done, use the **`📦 Download ALL Results (Single ZIP)`** button at the very bottom for a combined download of all results.
+
+**Understanding the Process (Behind the Scenes):**
+
+* The tool attempts to create an **OpenAI Vector Store** using your uploaded Context Files (Prompt, Rubric, Reference). This store helps find relevant grading information.
 * For each essay and selected model:
-    * It attempts to retrieve relevant context using the Vector Store (RAG via OpenAI).
-    * Sends the essay, prompt, rubric, reference, and retrieved context (if successful) to the model's API.
-    * Displays results and RAG status. RAG status reflects the OpenAI Vector Store process; all models benefit if retrieval works.
-* View comparison tables and download results (TXT, PDF, CSV) per essay or combined.
-""")
+    * It tries to retrieve relevant context from the Vector Store (this is the **RAG via OpenAI** step).
+    * It sends the essay, original prompt, rubric, reference, and the *retrieved context* (if successful) to the chosen model's API (OpenAI, Anthropic, or Google).
+    * The **RAG Status** displayed reflects the success of the OpenAI Vector Store creation and context retrieval for that specific essay; all models benefit from successfully retrieved context via the prompt.
+        """)
 
     # About Expander
     with st.expander("📚 About & Disclaimer"):
