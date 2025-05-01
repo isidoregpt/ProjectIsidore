@@ -717,22 +717,7 @@ def main():
         st.markdown("""
 **Goal:** Grade essays using multiple AI models (OpenAI, Anthropic, Google Gemini) and compare outputs, potentially enhancing consistency with Retrieval-Augmented Generation (RAG) using OpenAI's Vector Store.
 
-**Prerequisites & Initial Run:**
-
-1.  **Save the Code:** Save this Python script to your computer (e.g., as `grader_app.py`).
-2.  **Install Libraries:** Open your terminal or command prompt. Navigate to the directory where you saved the script. It's highly recommended to use a Python virtual environment. Install the necessary libraries by running:
-    ```bash
-    pip install streamlit openai requests fpdf pandas google-generativeai
-    ```
-3.  **Run the App:** Start the Streamlit application from your terminal using:
-    ```bash
-    streamlit run grader_app.py
-    ```
-    *(Replace `grader_app.py` with the actual name you saved the script as)*. The application should open in your web browser.
-
 **Using the App Interface (Step-by-Step):**
-
-*(Once the app is running in your browser)*
 
 1.  **Upload API Key:** Locate the first file uploader labeled **`🔑 API Key (TXT)`**. Click "Browse files" (or drag and drop) to upload the TXT file containing your API key.
     * **Important:** This tool currently uses the *same* uploaded key for *all* selected providers (OpenAI, Anthropic, Google). Ensure the key is valid for the services you choose.
