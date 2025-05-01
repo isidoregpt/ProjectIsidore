@@ -5,3 +5,6 @@ python-pptx
 openpyxl
 PyMuPDF
 Pillow
+pandas
+requests
+google-generativeai
